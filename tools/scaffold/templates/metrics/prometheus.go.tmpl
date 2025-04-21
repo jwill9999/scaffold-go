@@ -1,0 +1,99 @@
+package metrics
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+type PrometheusMetrics struct {
+	requestDuration *prometheus.HistogramVec
+	requestTotal    *prometheus.CounterVec
+	errorTotal      *prometheus.CounterVec
+	activeRequests  *prometheus.GaugeVec
+}
+
+func NewPrometheusMetrics() *PrometheusMetrics {
+	return &PrometheusMetrics{
+		requestDuration: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Name:    "http_request_duration_seconds",
+				Help:    "Duration of HTTP requests",
+				Buckets: prometheus.DefBuckets,
+			},
+			[]string{"method", "path", "status"},
+		),
+		requestTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "http_requests_total",
+				Help: "Total number of HTTP requests",
+			},
+			[]string{"method", "path", "status"},
+		),
+		errorTotal: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "http_errors_total",
+				Help: "Total number of HTTP errors",
+			},
+			[]string{"method", "path", "error"},
+		),
+		activeRequests: promauto.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "http_active_requests",
+				Help: "Number of active HTTP requests",
+			},
+			[]string{"method", "path"},
+		),
+	}
+}
+
+func (m *PrometheusMetrics) Middleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		path := c.FullPath()
+		method := c.Request.Method
+
+		// Increment active requests
+		m.activeRequests.WithLabelValues(method, path).Inc()
+
+		// Process request
+		c.Next()
+
+		// Record metrics
+		status := c.Writer.Status()
+		duration := time.Since(start).Seconds()
+
+		m.requestDuration.WithLabelValues(method, path, http.StatusText(status)).Observe(duration)
+		m.requestTotal.WithLabelValues(method, path, http.StatusText(status)).Inc()
+		m.activeRequests.WithLabelValues(method, path).Dec()
+
+		// Record errors
+		if status >= 400 {
+			m.errorTotal.WithLabelValues(method, path, http.StatusText(status)).Inc()
+		}
+	}
+}
+
+func (m *PrometheusMetrics) Handler() gin.HandlerFunc {
+	return gin.WrapH(promhttp.Handler())
+}
+
+func (m *PrometheusMetrics) RecordError(method, path, errorType string) {
+	m.errorTotal.WithLabelValues(method, path, errorType).Inc()
+}
+
+func (m *PrometheusMetrics) RecordDuration(method, path, status string, duration float64) {
+	m.requestDuration.WithLabelValues(method, path, status).Observe(duration)
+}
+
+func (m *PrometheusMetrics) IncrementRequest(method, path, status string) {
+	m.requestTotal.WithLabelValues(method, path, status).Inc()
+}
+
+func (m *PrometheusMetrics) SetActiveRequests(method, path string, count float64) {
+	m.activeRequests.WithLabelValues(method, path).Set(count)
+} 

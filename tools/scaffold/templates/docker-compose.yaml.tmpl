@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      target: ${TARGET:-builder}
+      args:
+        APP_NAME: ${APP_NAME}
+        APP_VERSION: ${APP_VERSION}
+    container_name: ${APP_NAME}-app
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      - APP_ENV=${APP_ENV:-development}
+      - DB_HOST=postgres
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - REDIS_HOST=redis
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRATION=${JWT_EXPIRATION}
+      - LOG_LEVEL=${LOG_LEVEL:-debug}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - RATE_LIMIT=${RATE_LIMIT:-100}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS}
+    volumes:
+      - .:/app  # For hot reloading in development
+      - go-modules:/go/pkg/mod  # Cache Go modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:13-alpine
+    container_name: ${APP_NAME}-postgres
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${APP_NAME}-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ${APP_NAME}-prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./config/prometheus:/etc/prometheus
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - app-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ${APP_NAME}-grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - app-network
+
+volumes:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+  go-modules:
+
+networks:
+  app-network:
+    driver: bridge 

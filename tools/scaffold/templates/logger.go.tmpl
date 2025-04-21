@@ -1,0 +1,89 @@
+package logger
+
+import (
+	"os"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
+
+	"{{.Module}}/internal/config"
+)
+
+type Logger struct {
+	*zap.SugaredLogger
+}
+
+// NewLogger creates a new logger instance
+func NewLogger(cfg *config.LoggerConfig) (*Logger, error) {
+	// Configure logging level
+	level, err := zapcore.ParseLevel(cfg.Level)
+	if err != nil {
+		return nil, err
+	}
+
+	// Configure encoders
+	encoderConfig := zap.NewProductionEncoderConfig()
+	encoderConfig.TimeKey = "timestamp"
+	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
+
+	var encoder zapcore.Encoder
+	if cfg.Format == "json" {
+		encoder = zapcore.NewJSONEncoder(encoderConfig)
+	} else {
+		encoder = zapcore.NewConsoleEncoder(encoderConfig)
+	}
+
+	// Configure output paths
+	var writer zapcore.WriteSyncer
+	if cfg.OutputPath != "" {
+		writer = zapcore.AddSync(&lumberjack.Logger{
+			Filename:   cfg.OutputPath,
+			MaxSize:    100, // megabytes
+			MaxBackups: 3,
+			MaxAge:     28,   // days
+			Compress:   true, // compress the backups
+		})
+	} else {
+		writer = zapcore.AddSync(os.Stdout)
+	}
+
+	// Create core
+	core := zapcore.NewCore(encoder, writer, level)
+
+	// Create logger
+	logger := zap.New(core,
+		zap.AddCaller(),
+		zap.AddCallerSkip(1),
+		zap.AddStacktrace(zapcore.ErrorLevel),
+	)
+
+	return &Logger{
+		SugaredLogger: logger.Sugar(),
+	}, nil
+}
+
+// WithFields adds structured fields to the logger
+func (l *Logger) WithFields(fields map[string]interface{}) *Logger {
+	args := make([]interface{}, 0, len(fields)*2)
+	for k, v := range fields {
+		args = append(args, k, v)
+	}
+	return &Logger{
+		SugaredLogger: l.With(args...),
+	}
+}
+
+// WithError adds an error field to the logger
+func (l *Logger) WithError(err error) *Logger {
+	return &Logger{
+		SugaredLogger: l.With("error", err),
+	}
+}
+
+// Example usage:
+// logger.Info("Server starting", "port", 8080)
+// logger.Error("Failed to connect to database", "error", err)
+// logger.WithFields(map[string]interface{}{"user_id": 123}).Info("User logged in")
+// logger.WithError(err).Error("Operation failed") 

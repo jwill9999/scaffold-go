@@ -1,0 +1,128 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      - APP_ENV=development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME={{.Name}}
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - .:/app
+      - go-mod-cache:/go/pkg/mod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB={{.Name}}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus:/etc/prometheus
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - backend
+
+  grafana:
+    image: grafana/grafana:10.0.3
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - backend
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.47
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp"
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686"
+      - "14250:14250"
+      - "14268:14268"
+      - "14269:14269"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - backend
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - backend
+
+volumes:
+  postgres-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+  go-mod-cache:
+
+networks:
+  backend:
+    driver: bridge 

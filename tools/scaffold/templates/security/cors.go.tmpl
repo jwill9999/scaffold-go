@@ -1,0 +1,91 @@
+package security
+
+import (
+	"github.com/gin-gonic/gin"
+	"strings"
+	"time"
+)
+
+type CORSOptions struct {
+	AllowedOrigins   []string
+	AllowedMethods   []string
+	AllowedHeaders   []string
+	ExposedHeaders   []string
+	AllowCredentials bool
+	MaxAge           time.Duration
+}
+
+var DefaultCORSOptions = CORSOptions{
+	AllowedOrigins:   []string{"*"},
+	AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+	AllowedHeaders:   []string{"Origin", "Content-Type", "Accept", "Authorization"},
+	ExposedHeaders:   []string{"Content-Length"},
+	AllowCredentials: true,
+	MaxAge:           12 * time.Hour,
+}
+
+func CORS(options CORSOptions) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		origin := c.Request.Header.Get("Origin")
+		if origin == "" {
+			origin = "*"
+		}
+
+		// Set CORS headers
+		c.Writer.Header().Set("Access-Control-Allow-Origin", strings.Join(options.AllowedOrigins, ","))
+		c.Writer.Header().Set("Access-Control-Allow-Methods", strings.Join(options.AllowedMethods, ","))
+		c.Writer.Header().Set("Access-Control-Allow-Headers", strings.Join(options.AllowedHeaders, ","))
+		c.Writer.Header().Set("Access-Control-Expose-Headers", strings.Join(options.ExposedHeaders, ","))
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Max-Age", options.MaxAge.String())
+
+		// Handle preflight requests
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// ValidateOrigin checks if the request origin is allowed
+func ValidateOrigin(origin string, allowedOrigins []string) bool {
+	if len(allowedOrigins) == 0 {
+		return true
+	}
+
+	for _, allowed := range allowedOrigins {
+		if allowed == "*" || allowed == origin {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateMethod checks if the request method is allowed
+func ValidateMethod(method string, allowedMethods []string) bool {
+	for _, allowed := range allowedMethods {
+		if allowed == method {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateHeaders checks if the request headers are allowed
+func ValidateHeaders(headers []string, allowedHeaders []string) bool {
+	for _, header := range headers {
+		valid := false
+		for _, allowed := range allowedHeaders {
+			if strings.EqualFold(header, allowed) {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			return false
+		}
+	}
+	return true
+} 

@@ -1,0 +1,153 @@
+package migrations
+
+import (
+	"database/sql"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"go.uber.org/zap"
+	"gorm.io/gorm"
+
+	"{{.Module}}/internal/config"
+	"{{.Module}}/internal/models"
+	"{{.Module}}/pkg/errors"
+)
+
+// Migrator handles database migrations
+type Migrator struct {
+	db        *sql.DB
+	gormDB    *gorm.DB
+	config    *config.DatabaseConfig
+	logger    *zap.Logger
+	migrate   *migrate.Migrate
+	isDevMode bool
+}
+
+// NewMigrator creates a new Migrator instance
+func NewMigrator(db *sql.DB, gormDB *gorm.DB, config *config.DatabaseConfig, logger *zap.Logger) (*Migrator, error) {
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create postgres driver: %w", err)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://migrations",
+		"postgres",
+		driver,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create migrator: %w", err)
+	}
+
+	return &Migrator{
+		db:        db,
+		gormDB:    gormDB,
+		config:    config,
+		logger:    logger.With(zap.String("component", "migrator")),
+		migrate:   m,
+		isDevMode: config.Environment == "development",
+	}, nil
+}
+
+// Up runs all available migrations
+func (m *Migrator) Up() error {
+	if m.isDevMode && m.config.AutoMigrate {
+		m.logger.Info("Running GORM AutoMigrate in development mode")
+		if err := m.autoMigrate(); err != nil {
+			return err
+		}
+	}
+
+	m.logger.Info("Running SQL migrations")
+	if err := m.migrate.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("failed to run migrations: %w", err)
+	}
+
+	return nil
+}
+
+// Down rolls back all migrations
+func (m *Migrator) Down() error {
+	m.logger.Info("Rolling back all migrations")
+	if err := m.migrate.Down(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("failed to rollback migrations: %w", err)
+	}
+	return nil
+}
+
+// Steps runs n migrations up or down
+func (m *Migrator) Steps(n int) error {
+	m.logger.Info("Running migration steps", zap.Int("steps", n))
+	if err := m.migrate.Steps(n); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("failed to run migration steps: %w", err)
+	}
+	return nil
+}
+
+// Version returns the current migration version
+func (m *Migrator) Version() (uint, bool, error) {
+	return m.migrate.Version()
+}
+
+// Force sets a specific migration version
+func (m *Migrator) Force(version int) error {
+	return m.migrate.Force(version)
+}
+
+// autoMigrate runs GORM's AutoMigrate in development mode
+func (m *Migrator) autoMigrate() error {
+	m.logger.Info("Running GORM AutoMigrate")
+	if err := m.gormDB.AutoMigrate(
+		&models.User{},
+		// Add your models here
+		{{range .Models}}
+		&models.{{.}}{},
+		{{end}}
+	); err != nil {
+		return fmt.Errorf("failed to auto-migrate: %w", err)
+	}
+	return nil
+}
+
+// GenerateInitialMigration generates an initial migration from current schema
+func (m *Migrator) GenerateInitialMigration() error {
+	timestamp := time.Now().UTC().Format("20060102150405")
+	filename := fmt.Sprintf("migrations/%s_initial_schema.sql", timestamp)
+
+	schema, err := m.dumpSchema()
+	if err != nil {
+		return err
+	}
+
+	// Create migration file
+	migration := fmt.Sprintf(`-- +migrate Up
+%s
+
+-- +migrate Down
+DROP SCHEMA public CASCADE;
+CREATE SCHEMA public;
+`, schema)
+
+	if err := os.WriteFile(filename, []byte(migration), 0644); err != nil {
+		return fmt.Errorf("failed to write migration file: %w", err)
+	}
+
+	m.logger.Info("Generated initial migration", zap.String("file", filename))
+	return nil
+}
+
+// dumpSchema dumps the current database schema
+func (m *Migrator) dumpSchema() (string, error) {
+	// Implementation depends on your specific needs
+	// You might want to use pg_dump or a similar tool
+	return "", errors.ErrNotImplemented
+}
+
+// Close closes the migrator
+func (m *Migrator) Close() error {
+	return m.migrate.Close()
+} 

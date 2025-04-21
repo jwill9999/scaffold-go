@@ -1,0 +1,451 @@
+package {{.Package}}
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
+	"go.uber.org/mock/gomock"
+	"go.uber.org/zap/zaptest"
+	"gorm.io/gorm"
+
+	"{{.Module}}/internal/config"
+	"{{.Module}}/internal/models"
+	"{{.Module}}/internal/services"
+	"{{.Module}}/internal/repository"
+	"{{.Module}}/pkg/errors"
+	"{{.Module}}/pkg/logger"
+	{{if .Features.Metrics}}"{{.Module}}/pkg/metrics"{{end}}
+)
+
+type TestSuite struct {
+	suite.Suite
+	ctx       context.Context
+	cfg       *config.Config
+	logger    *logger.Logger
+	db        *gorm.DB
+	container testcontainers.Container
+	ctrl      *gomock.Controller
+	{{if .Features.Metrics}}metrics   *metrics.Client{{end}}
+}
+
+func TestSuite_Run(t *testing.T) {
+	suite.Run(t, new(TestSuite))
+}
+
+func (s *TestSuite) SetupSuite() {
+	s.ctx = context.Background()
+	s.ctrl = gomock.NewController(s.T())
+
+	// Load test config
+	cfg, err := config.LoadConfig("../../config/test")
+	s.Require().NoError(err)
+	s.cfg = cfg
+
+	// Setup logger
+	logger, err := logger.NewLogger(&cfg.Logger)
+	s.Require().NoError(err)
+	s.logger = logger
+
+	{{if .Features.Metrics}}
+	// Setup metrics
+	metrics, err := metrics.NewClient(&cfg.Metrics)
+	s.Require().NoError(err)
+	s.metrics = metrics
+	{{end}}
+
+	// Setup test database
+	s.setupTestDatabase()
+}
+
+func (s *TestSuite) TearDownSuite() {
+	// Cleanup database
+	if s.container != nil {
+		s.Require().NoError(s.container.Terminate(s.ctx))
+	}
+
+	// Cleanup mocks
+	s.ctrl.Finish()
+
+	{{if .Features.Metrics}}
+	// Cleanup metrics
+	if s.metrics != nil {
+		s.Require().NoError(s.metrics.Close())
+	}
+	{{end}}
+}
+
+func (s *TestSuite) setupTestDatabase() {
+	req := testcontainers.ContainerRequest{
+		Image:        "postgres:13",
+		ExposedPorts: []string{"5432/tcp"},
+		WaitingFor:   wait.ForListeningPort("5432/tcp"),
+		Env: map[string]string{
+			"POSTGRES_DB":       "test",
+			"POSTGRES_USER":     "test",
+			"POSTGRES_PASSWORD": "test",
+		},
+	}
+
+	container, err := testcontainers.GenericContainer(s.ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:         true,
+	})
+	s.Require().NoError(err)
+	s.container = container
+
+	// Get host and port
+	host, err := container.Host(s.ctx)
+	s.Require().NoError(err)
+	port, err := container.MappedPort(s.ctx, "5432")
+	s.Require().NoError(err)
+
+	// Update config with container details
+	s.cfg.Database.Host = host
+	s.cfg.Database.Port = port.Port()
+
+	// Connect to database
+	db, err := sql.Open("postgres", s.cfg.Database.GetDSN())
+	s.Require().NoError(err)
+
+	// Run migrations
+	migrator, err := migrations.NewMigrator(db, &s.cfg.Database, s.logger)
+	s.Require().NoError(err)
+	s.Require().NoError(migrator.Up())
+	s.Require().NoError(migrator.Close())
+
+	// Setup GORM
+	gormDB, err := gorm.Open(postgres.Open(s.cfg.Database.GetDSN()), &gorm.Config{})
+	s.Require().NoError(err)
+	s.db = gormDB
+}
+
+// Helper functions for tests
+
+// createTestUser creates a test user
+func (s *TestSuite) createTestUser() *models.User {
+	user := &models.User{
+		Email:     "test@example.com",
+		Password:  "password",
+		FirstName: "Test",
+		LastName:  "User",
+	}
+	s.Require().NoError(s.db.Create(user).Error)
+	return user
+}
+
+// clearTable clears all records from a table
+func (s *TestSuite) clearTable(table string) {
+	s.Require().NoError(s.db.Exec("TRUNCATE TABLE " + table + " CASCADE").Error)
+}
+
+// mockTime mocks time.Now for testing
+func (s *TestSuite) mockTime(t time.Time) func() {
+	original := timeNow
+	timeNow = func() time.Time { return t }
+	return func() { timeNow = original }
+}
+
+// Example test
+func (s *TestSuite) TestCreateUser() {
+	// Setup
+	repo := repository.NewUserRepository(s.db, s.logger{{if .Features.Metrics}}, s.metrics{{end}})
+	service := service.NewUserService(repo, s.logger{{if .Features.Metrics}}, s.metrics{{end}})
+
+	// Test data
+	user := &models.User{
+		Email:     "test@example.com",
+		Password:  "password",
+		FirstName: "Test",
+		LastName:  "User",
+	}
+
+	// Execute
+	err := service.Create(s.ctx, user)
+
+	// Assert
+	s.Require().NoError(err)
+	s.NotZero(user.ID)
+	s.NotEmpty(user.CreatedAt)
+	s.NotEmpty(user.UpdatedAt)
+
+	// Verify in database
+	var found models.User
+	s.Require().NoError(s.db.First(&found, user.ID).Error)
+	s.Equal(user.Email, found.Email)
+	s.Equal(user.FirstName, found.FirstName)
+	s.Equal(user.LastName, found.LastName)
+}
+
+// Unit Tests
+
+type mock{{.Name}}Service struct {
+	mock.Mock
+}
+
+func (m *mock{{.Name}}Service) Create(ctx context.Context, input *models.{{.Name}}Input) (*models.{{.Name}}, error) {
+	args := m.Called(ctx, input)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.{{.Name}}), args.Error(1)
+}
+
+func (m *mock{{.Name}}Service) GetByID(ctx context.Context, id uint) (*models.{{.Name}}, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.{{.Name}}), args.Error(1)
+}
+
+func (m *mock{{.Name}}Service) Update(ctx context.Context, id uint, input *models.{{.Name}}Input) (*models.{{.Name}}, error) {
+	args := m.Called(ctx, id, input)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.{{.Name}}), args.Error(1)
+}
+
+func (m *mock{{.Name}}Service) Delete(ctx context.Context, id uint) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *mock{{.Name}}Service) List(ctx context.Context, params *models.ListParams) ([]*models.{{.Name}}, *models.Pagination, error) {
+	args := m.Called(ctx, params)
+	return args.Get(0).([]*models.{{.Name}}), args.Get(1).(*models.Pagination), args.Error(2)
+}
+
+func Test{{.Name}}Handler_Create(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name           string
+		input          models.{{.Name}}Input
+		mockSetup      func(*mock{{.Name}}Service)
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name: "success",
+			input: models.{{.Name}}Input{
+				// Add test input fields
+			},
+			mockSetup: func(s *mock{{.Name}}Service) {
+				s.On("Create", mock.Anything, mock.AnythingOfType("*models.{{.Name}}Input")).
+					Return(&models.{{.Name}}{
+						Base: models.Base{ID: 1},
+						// Add expected fields
+					}, nil)
+			},
+			expectedStatus: http.StatusCreated,
+			expectedBody:   `{"id":1}`,
+		},
+		{
+			name: "validation error",
+			input: models.{{.Name}}Input{
+				// Add invalid input
+			},
+			mockSetup: func(s *mock{{.Name}}Service) {
+				s.On("Create", mock.Anything, mock.AnythingOfType("*models.{{.Name}}Input")).
+					Return(nil, errors.ErrValidation.WithDetail("field", "invalid"))
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedBody:   `{"error":"validation error","details":{"field":"invalid"}}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockService := new(mock{{.Name}}Service)
+			tt.mockSetup(mockService)
+
+			handler := New{{.Name}}Handler(mockService, zaptest.NewLogger(t))
+			router := gin.New()
+			router.POST("/{{.Resource}}s", handler.Create)
+
+			body, _ := json.Marshal(tt.input)
+			req := httptest.NewRequest(http.MethodPost, "/{{.Resource}}s", strings.NewReader(string(body)))
+			req.Header.Set("Content-Type", "application/json")
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, req)
+
+			assert.Equal(t, tt.expectedStatus, resp.Code)
+			assert.JSONEq(t, tt.expectedBody, resp.Body.String())
+			mockService.AssertExpectations(t)
+		})
+	}
+}
+
+// Integration Tests
+
+func Test{{.Name}}Integration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	// Setup test database
+	db, err := setupTestDB()
+	require.NoError(t, err)
+
+	// Create dependencies
+	logger := zaptest.NewLogger(t)
+	repo := repository.New{{.Name}}Repository(db, logger)
+	service := services.New{{.Name}}Service(repo, logger)
+	handler := New{{.Name}}Handler(service, logger)
+
+	// Setup router
+	router := gin.New()
+	router.POST("/{{.Resource}}s", handler.Create)
+	router.GET("/{{.Resource}}s/:id", handler.GetByID)
+
+	// Test Create and Get
+	t.Run("create and get", func(t *testing.T) {
+		input := models.{{.Name}}Input{
+			// Add test input fields
+		}
+
+		// Create
+		body, _ := json.Marshal(input)
+		req := httptest.NewRequest(http.MethodPost, "/{{.Resource}}s", strings.NewReader(string(body)))
+		req.Header.Set("Content-Type", "application/json")
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		assert.Equal(t, http.StatusCreated, resp.Code)
+
+		var created models.{{.Name}}
+		err = json.Unmarshal(resp.Body.Bytes(), &created)
+		require.NoError(t, err)
+		assert.NotZero(t, created.ID)
+
+		// Get
+		req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("/{{.Resource}}s/%d", created.ID), nil)
+		resp = httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		assert.Equal(t, http.StatusOK, resp.Code)
+
+		var retrieved models.{{.Name}}
+		err = json.Unmarshal(resp.Body.Bytes(), &retrieved)
+		require.NoError(t, err)
+		assert.Equal(t, created.ID, retrieved.ID)
+		// Add more field assertions
+	})
+}
+
+// E2E Tests
+
+func Test{{.Name}}E2E(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test")
+	}
+
+	// Start test server
+	srv := setupTestServer()
+	defer srv.Close()
+
+	// Create HTTP client
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	t.Run("full lifecycle", func(t *testing.T) {
+		// Create
+		input := models.{{.Name}}Input{
+			// Add test input fields
+		}
+		body, _ := json.Marshal(input)
+		req, err := http.NewRequest(http.MethodPost, srv.URL+"/{{.Resource}}s", strings.NewReader(string(body)))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		var created models.{{.Name}}
+		err = json.NewDecoder(resp.Body).Decode(&created)
+		require.NoError(t, err)
+		assert.NotZero(t, created.ID)
+
+		// Get
+		req, err = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/{{.Resource}}s/%d", srv.URL, created.ID), nil)
+		require.NoError(t, err)
+
+		resp, err = client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var retrieved models.{{.Name}}
+		err = json.NewDecoder(resp.Body).Decode(&retrieved)
+		require.NoError(t, err)
+		assert.Equal(t, created.ID, retrieved.ID)
+		// Add more field assertions
+
+		// Update
+		updateInput := models.{{.Name}}Input{
+			// Add updated fields
+		}
+		body, _ = json.Marshal(updateInput)
+		req, err = http.NewRequest(http.MethodPut, fmt.Sprintf("%s/{{.Resource}}s/%d", srv.URL, created.ID), strings.NewReader(string(body)))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err = client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// Delete
+		req, err = http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/{{.Resource}}s/%d", srv.URL, created.ID), nil)
+		require.NoError(t, err)
+
+		resp, err = client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+		// Verify deletion
+		req, err = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/{{.Resource}}s/%d", srv.URL, created.ID), nil)
+		require.NoError(t, err)
+
+		resp, err = client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+}
+
+// Helper functions
+
+func setupTestDB() (*gorm.DB, error) {
+	// Implement test database setup
+	return nil, nil
+}
+
+func setupTestServer() *httptest.Server {
+	// Implement test server setup
+	return nil
+} 

@@ -1,0 +1,110 @@
+package tracing
+
+import (
+	"context"
+	"fmt"
+	"io"
+
+	"github.com/gin-gonic/gin"
+	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
+	"github.com/uber/jaeger-client-go"
+	jaegercfg "github.com/uber/jaeger-client-go/config"
+)
+
+type JaegerTracer struct {
+	tracer opentracing.Tracer
+	closer io.Closer
+}
+
+func NewJaegerTracer(serviceName string) (*JaegerTracer, error) {
+	cfg := jaegercfg.Configuration{
+		ServiceName: serviceName,
+		Sampler: &jaegercfg.SamplerConfig{
+			Type:  jaeger.SamplerTypeConst,
+			Param: 1,
+		},
+		Reporter: &jaegercfg.ReporterConfig{
+			LogSpans: true,
+		},
+	}
+
+	tracer, closer, err := cfg.NewTracer()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tracer: %w", err)
+	}
+
+	opentracing.SetGlobalTracer(tracer)
+
+	return &JaegerTracer{
+		tracer: tracer,
+		closer: closer,
+	}, nil
+}
+
+func (t *JaegerTracer) Middleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		spanCtx, _ := t.tracer.Extract(
+			opentracing.HTTPHeaders,
+			opentracing.HTTPHeadersCarrier(c.Request.Header),
+		)
+
+		span := t.tracer.StartSpan(
+			c.Request.URL.Path,
+			ext.RPCServerOption(spanCtx),
+			ext.SpanKindRPCServer,
+		)
+		defer span.Finish()
+
+		// Add tags
+		span.SetTag("http.method", c.Request.Method)
+		span.SetTag("http.url", c.Request.URL.String())
+		span.SetTag("http.host", c.Request.Host)
+
+		// Store span in context
+		c.Request = c.Request.WithContext(
+			opentracing.ContextWithSpan(c.Request.Context(), span),
+		)
+
+		c.Next()
+
+		// Add response status
+		span.SetTag("http.status_code", c.Writer.Status())
+	}
+}
+
+func (t *JaegerTracer) StartSpan(ctx context.Context, operationName string) (opentracing.Span, context.Context) {
+	return opentracing.StartSpanFromContext(ctx, operationName)
+}
+
+func (t *JaegerTracer) Inject(span opentracing.Span, carrier interface{}) error {
+	return t.tracer.Inject(span.Context(), opentracing.HTTPHeaders, carrier)
+}
+
+func (t *JaegerTracer) Extract(carrier interface{}) (opentracing.SpanContext, error) {
+	return t.tracer.Extract(opentracing.HTTPHeaders, carrier)
+}
+
+func (t *JaegerTracer) Close() error {
+	return t.closer.Close()
+}
+
+// Helper functions for common tracing operations
+func (t *JaegerTracer) TraceDB(ctx context.Context, operation string) (opentracing.Span, context.Context) {
+	span, ctx := t.StartSpan(ctx, fmt.Sprintf("db.%s", operation))
+	span.SetTag("component", "database")
+	return span, ctx
+}
+
+func (t *JaegerTracer) TraceCache(ctx context.Context, operation string) (opentracing.Span, context.Context) {
+	span, ctx := t.StartSpan(ctx, fmt.Sprintf("cache.%s", operation))
+	span.SetTag("component", "cache")
+	return span, ctx
+}
+
+func (t *JaegerTracer) TraceExternal(ctx context.Context, service, operation string) (opentracing.Span, context.Context) {
+	span, ctx := t.StartSpan(ctx, fmt.Sprintf("external.%s.%s", service, operation))
+	span.SetTag("component", "external")
+	span.SetTag("service", service)
+	return span, ctx
+} 

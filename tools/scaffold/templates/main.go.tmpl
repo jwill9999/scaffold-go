@@ -1,0 +1,138 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
+	"{{.Module}}/internal/config"
+	"{{.Module}}/internal/handlers"
+	"{{.Module}}/internal/repository"
+	"{{.Module}}/internal/services"
+	"{{.Module}}/pkg/database"
+	"{{.Module}}/pkg/logger"
+	{{if .Features.Metrics}}"{{.Module}}/pkg/metrics"{{end}}
+	{{if .Features.Redis}}"{{.Module}}/pkg/redis"{{end}}
+)
+
+func main() {
+	// Load configuration
+	cfg, err := config.LoadConfig("config")
+	if err != nil {
+		fmt.Printf("Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Initialize logger
+	logger, err := logger.NewLogger(&cfg.Logger)
+	if err != nil {
+		fmt.Printf("Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer logger.Sync()
+
+	{{if .Features.Metrics}}
+	// Initialize metrics
+	metrics, err := metrics.NewClient(&cfg.Metrics)
+	if err != nil {
+		logger.Fatal("Failed to initialize metrics", zap.Error(err))
+	}
+	defer metrics.Close()
+	{{end}}
+
+	// Initialize database
+	db, err := database.NewConnection(&cfg.Database)
+	if err != nil {
+		logger.Fatal("Failed to connect to database", zap.Error(err))
+	}
+
+	{{if .Features.Redis}}
+	// Initialize Redis
+	redis, err := redis.NewClient(&cfg.Redis)
+	if err != nil {
+		logger.Fatal("Failed to connect to Redis", zap.Error(err))
+	}
+	defer redis.Close()
+	{{end}}
+
+	// Initialize repositories
+	{{range .Resources}}
+	{{.Resource}}Repo := repository.New{{.Name}}Repository(
+		db,
+		logger,
+		{{if $.Features.Metrics}}metrics,{{end}}
+	)
+	{{end}}
+
+	// Initialize services
+	{{range .Resources}}
+	{{.Resource}}Service := services.New{{.Name}}Service(
+		{{.Resource}}Repo,
+		logger,
+		{{if $.Features.Metrics}}metrics,{{end}}
+	)
+	{{end}}
+
+	// Initialize handlers
+	{{range .Resources}}
+	{{.Resource}}Handler := handlers.New{{.Name}}Handler(
+		{{.Resource}}Service,
+		logger,
+	)
+	{{end}}
+
+	// Initialize router
+	router := gin.New()
+	router.Use(gin.Recovery())
+
+	// Register middleware
+	router.Use(handlers.RequestLogger(logger))
+	{{if .Features.Metrics}}
+	router.Use(handlers.MetricsMiddleware(metrics))
+	{{end}}
+
+	// Register routes
+	v1 := router.Group("/api/v1")
+	{
+		{{range .Resources}}
+		{{.Resource}}Handler.Register(v1)
+		{{end}}
+	}
+
+	// Start server
+	srv := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler: router,
+	}
+
+	// Graceful shutdown
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Fatal("Failed to start server", zap.Error(err))
+		}
+	}()
+
+	// Wait for interrupt signal
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	logger.Info("Shutting down server...")
+
+	// Give outstanding requests a timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Fatal("Server forced to shutdown", zap.Error(err))
+	}
+
+	logger.Info("Server exited properly")
+} 

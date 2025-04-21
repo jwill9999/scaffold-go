@@ -1,0 +1,418 @@
+package repository
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"{{.Module}}/internal/models"
+	"{{.Module}}/pkg/logger"
+	"{{.Module}}/pkg/errors"
+	{{if .Features.Metrics}}"{{.Module}}/pkg/metrics"{{end}}
+
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"go.uber.org/zap"
+)
+
+var (
+	ErrNotFound = errors.New("record not found")
+	ErrInvalid  = errors.New("invalid input")
+	ErrConflict = errors.New("record already exists")
+)
+
+// Repository interface defines standard CRUD operations
+type Repository[T any] interface {
+	Create(ctx context.Context, entity *T) error
+	GetByID(ctx context.Context, id uint) (*T, error)
+	Update(ctx context.Context, entity *T) error
+	Delete(ctx context.Context, id uint) error
+	List(ctx context.Context, offset, limit int) ([]T, int64, error)
+	// Transaction support
+	WithTx(tx *gorm.DB) Repository[T]
+	// Query builder methods
+	Where(query interface{}, args ...interface{}) Repository[T]
+	Preload(query string, args ...interface{}) Repository[T]
+	Order(value interface{}) Repository[T]
+}
+
+// BaseRepository provides common functionality for repositories
+type BaseRepository[T any] struct {
+	db      *gorm.DB
+	logger  *logger.Logger
+	{{if .Features.Metrics}}metrics *metrics.Client{{end}}
+	// Query builder fields
+	queryDB *gorm.DB
+}
+
+// NewBaseRepository creates a new base repository
+func NewBaseRepository[T any](
+	db *gorm.DB,
+	logger *logger.Logger,
+	{{if .Features.Metrics}}metrics *metrics.Client,{{end}}
+) *BaseRepository[T] {
+	return &BaseRepository[T]{
+		db:      db,
+		logger:  logger,
+		{{if .Features.Metrics}}metrics: metrics,{{end}}
+		queryDB: db,
+	}
+}
+
+// WithTx creates a new repository instance with transaction
+func (r *BaseRepository[T]) WithTx(tx *gorm.DB) Repository[T] {
+	return &BaseRepository[T]{
+		db:      tx,
+		logger:  r.logger,
+		{{if .Features.Metrics}}metrics: r.metrics,{{end}}
+		queryDB: tx,
+	}
+}
+
+// Where adds a where clause to the query
+func (r *BaseRepository[T]) Where(query interface{}, args ...interface{}) Repository[T] {
+	return &BaseRepository[T]{
+		db:      r.db,
+		logger:  r.logger,
+		{{if .Features.Metrics}}metrics: r.metrics,{{end}}
+		queryDB: r.queryDB.Where(query, args...),
+	}
+}
+
+// Preload adds a preload clause to the query
+func (r *BaseRepository[T]) Preload(query string, args ...interface{}) Repository[T] {
+	return &BaseRepository[T]{
+		db:      r.db,
+		logger:  r.logger,
+		{{if .Features.Metrics}}metrics: r.metrics,{{end}}
+		queryDB: r.queryDB.Preload(query, args...),
+	}
+}
+
+// Order adds an order clause to the query
+func (r *BaseRepository[T]) Order(value interface{}) Repository[T] {
+	return &BaseRepository[T]{
+		db:      r.db,
+		logger:  r.logger,
+		{{if .Features.Metrics}}metrics: r.metrics,{{end}}
+		queryDB: r.queryDB.Order(value),
+	}
+}
+
+// Create inserts a new entity
+func (r *BaseRepository[T]) Create(ctx context.Context, entity *T) error {
+	{{if .Features.Metrics}}
+	defer r.metrics.MeasureOperation("repository_create")
+	{{end}}
+
+	if err := r.queryDB.WithContext(ctx).Create(entity).Error; err != nil {
+		if r.isDuplicateError(err) {
+			return ErrConflict
+		}
+		r.logger.Error("Failed to create entity", "error", err)
+		return fmt.Errorf("failed to create entity: %w", err)
+	}
+
+	// Reset query builder
+	r.queryDB = r.db
+	return nil
+}
+
+// GetByID retrieves an entity by ID
+func (r *BaseRepository[T]) GetByID(ctx context.Context, id uint) (*T, error) {
+	{{if .Features.Metrics}}
+	defer r.metrics.MeasureOperation("repository_get_by_id")
+	{{end}}
+
+	var entity T
+	if err := r.queryDB.WithContext(ctx).First(&entity, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		r.logger.Error("Failed to get entity by ID", "error", err, "id", id)
+		return nil, fmt.Errorf("failed to get entity: %w", err)
+	}
+
+	// Reset query builder
+	r.queryDB = r.db
+	return &entity, nil
+}
+
+// Update modifies an existing entity
+func (r *BaseRepository[T]) Update(ctx context.Context, entity *T) error {
+	{{if .Features.Metrics}}
+	defer r.metrics.MeasureOperation("repository_update")
+	{{end}}
+
+	result := r.queryDB.WithContext(ctx).Save(entity)
+	if result.Error != nil {
+		if r.isDuplicateError(result.Error) {
+			return ErrConflict
+		}
+		r.logger.Error("Failed to update entity", "error", result.Error)
+		return fmt.Errorf("failed to update entity: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	// Reset query builder
+	r.queryDB = r.db
+	return nil
+}
+
+// Delete removes an entity
+func (r *BaseRepository[T]) Delete(ctx context.Context, id uint) error {
+	{{if .Features.Metrics}}
+	defer r.metrics.MeasureOperation("repository_delete")
+	{{end}}
+
+	var entity T
+	result := r.queryDB.WithContext(ctx).Delete(&entity, id)
+	if result.Error != nil {
+		r.logger.Error("Failed to delete entity", "error", result.Error, "id", id)
+		return fmt.Errorf("failed to delete entity: %w", result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	// Reset query builder
+	r.queryDB = r.db
+	return nil
+}
+
+// List retrieves entities with pagination
+func (r *BaseRepository[T]) List(ctx context.Context, offset, limit int) ([]T, int64, error) {
+	{{if .Features.Metrics}}
+	defer r.metrics.MeasureOperation("repository_list")
+	{{end}}
+
+	var entities []T
+	var total int64
+
+	// Get total count
+	if err := r.queryDB.WithContext(ctx).Model(new(T)).Count(&total).Error; err != nil {
+		r.logger.Error("Failed to count entities", "error", err)
+		return nil, 0, fmt.Errorf("failed to count entities: %w", err)
+	}
+
+	// Get paginated results
+	if err := r.queryDB.WithContext(ctx).Offset(offset).Limit(limit).Find(&entities).Error; err != nil {
+		r.logger.Error("Failed to list entities", "error", err)
+		return nil, 0, fmt.Errorf("failed to list entities: %w", err)
+	}
+
+	// Reset query builder
+	r.queryDB = r.db
+	return entities, total, nil
+}
+
+// isDuplicateError checks if the error is a duplicate key error
+func (r *BaseRepository[T]) isDuplicateError(err error) bool {
+	return errors.Is(err, gorm.ErrDuplicatedKey) || errors.Is(err, gorm.ErrForeignKeyViolated)
+}
+
+// Example User Repository implementation
+type UserRepository struct {
+	*BaseRepository[models.User]
+}
+
+func NewUserRepository(
+	db *gorm.DB,
+	logger *logger.Logger,
+	{{if .Features.Metrics}}metrics *metrics.Client,{{end}}
+) *UserRepository {
+	return &UserRepository{
+		BaseRepository: NewBaseRepository[models.User](db, logger, {{if .Features.Metrics}}metrics,{{end}}),
+	}
+}
+
+// GetByEmail retrieves a user by email
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
+	{{if .Features.Metrics}}
+	defer r.metrics.MeasureOperation("repository_get_by_email")
+	{{end}}
+
+	var user models.User
+	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		r.logger.Error("Failed to get user by email", "error", err, "email", email)
+		return nil, fmt.Errorf("failed to get user by email: %w", err)
+	}
+
+	return &user, nil
+}
+
+// Example of using transactions
+func (r *UserRepository) CreateWithRoles(ctx context.Context, user *models.User, roles []string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// Create user with transaction
+		if err := r.WithTx(tx).Create(ctx, user); err != nil {
+			return err
+		}
+
+		// Create roles with transaction
+		for _, role := range roles {
+			userRole := &models.UserRole{
+				UserID: user.ID,
+				Role:   role,
+			}
+			if err := tx.Create(userRole).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
+// Example of using query builder methods
+func (r *UserRepository) GetActiveUsersWithRoles(ctx context.Context, offset, limit int) ([]models.User, int64, error) {
+	return r.Where("active = ?", true).
+		Preload("Roles").
+		Order("created_at DESC").
+		List(ctx, offset, limit)
+}
+
+// {{.Name}}Repository defines the interface for {{.Resource}} database operations
+type {{.Name}}Repository interface {
+	Create(ctx context.Context, {{.Resource}} *models.{{.Name}}) error
+	GetByID(ctx context.Context, id uint) (*models.{{.Name}}, error)
+	Update(ctx context.Context, {{.Resource}} *models.{{.Name}}) error
+	Delete(ctx context.Context, id uint) error
+	List(ctx context.Context, params *models.ListParams) ([]*models.{{.Name}}, int64, error)
+}
+
+type {{.Resource}}Repository struct {
+	db      *gorm.DB
+	logger  *zap.Logger
+	{{if .Features.Metrics}}metrics *metrics.Client{{end}}
+}
+
+// New{{.Name}}Repository creates a new {{.Name}}Repository
+func New{{.Name}}Repository(
+	db *gorm.DB,
+	logger *zap.Logger,
+	{{if .Features.Metrics}}metrics *metrics.Client,{{end}}
+) {{.Name}}Repository {
+	return &{{.Resource}}Repository{
+		db:      db,
+		logger:  logger.With(zap.String("repository", "{{.Resource}}")),
+		{{if .Features.Metrics}}metrics: metrics,{{end}}
+	}
+}
+
+// Create creates a new {{.Resource}} in the database
+func (r *{{.Resource}}Repository) Create(ctx context.Context, {{.Resource}} *models.{{.Name}}) error {
+	{{if .Features.Metrics}}
+	defer r.metrics.MeasureLatency("{{.Resource}}_repository_create")
+	{{end}}
+
+	if err := r.db.WithContext(ctx).Create({{.Resource}}).Error; err != nil {
+		r.logger.Error("failed to create {{.Resource}}", zap.Error(err))
+		return errors.ErrDatabase.WithError(err)
+	}
+
+	return nil
+}
+
+// GetByID retrieves a {{.Resource}} by ID from the database
+func (r *{{.Resource}}Repository) GetByID(ctx context.Context, id uint) (*models.{{.Name}}, error) {
+	{{if .Features.Metrics}}
+	defer r.metrics.MeasureLatency("{{.Resource}}_repository_get")
+	{{end}}
+
+	var {{.Resource}} models.{{.Name}}
+	if err := r.db.WithContext(ctx).First(&{{.Resource}}, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.ErrNotFound
+		}
+		r.logger.Error("failed to get {{.Resource}}", zap.Error(err), zap.Uint("id", id))
+		return nil, errors.ErrDatabase.WithError(err)
+	}
+
+	return &{{.Resource}}, nil
+}
+
+// Update updates a {{.Resource}} in the database
+func (r *{{.Resource}}Repository) Update(ctx context.Context, {{.Resource}} *models.{{.Name}}) error {
+	{{if .Features.Metrics}}
+	defer r.metrics.MeasureLatency("{{.Resource}}_repository_update")
+	{{end}}
+
+	if err := r.db.WithContext(ctx).Save({{.Resource}}).Error; err != nil {
+		r.logger.Error("failed to update {{.Resource}}", zap.Error(err), zap.Uint("id", {{.Resource}}.ID))
+		return errors.ErrDatabase.WithError(err)
+	}
+
+	return nil
+}
+
+// Delete deletes a {{.Resource}} from the database
+func (r *{{.Resource}}Repository) Delete(ctx context.Context, id uint) error {
+	{{if .Features.Metrics}}
+	defer r.metrics.MeasureLatency("{{.Resource}}_repository_delete")
+	{{end}}
+
+	result := r.db.WithContext(ctx).Delete(&models.{{.Name}}{}, id)
+	if err := result.Error; err != nil {
+		r.logger.Error("failed to delete {{.Resource}}", zap.Error(err), zap.Uint("id", id))
+		return errors.ErrDatabase.WithError(err)
+	}
+
+	if result.RowsAffected == 0 {
+		return errors.ErrNotFound
+	}
+
+	return nil
+}
+
+// List retrieves a list of {{.Resource}}s from the database
+func (r *{{.Resource}}Repository) List(ctx context.Context, params *models.ListParams) ([]*models.{{.Name}}, int64, error) {
+	{{if .Features.Metrics}}
+	defer r.metrics.MeasureLatency("{{.Resource}}_repository_list")
+	{{end}}
+
+	var total int64
+	var {{.Resource}}s []*models.{{.Name}}
+
+	query := r.db.WithContext(ctx).Model(&models.{{.Name}}{})
+
+	// Apply filters
+	if params.Filters != nil {
+		for field, value := range params.Filters {
+			query = query.Where(fmt.Sprintf("%s = ?", field), value)
+		}
+	}
+
+	// Get total count
+	if err := query.Count(&total).Error; err != nil {
+		r.logger.Error("failed to count {{.Resource}}s", zap.Error(err))
+		return nil, 0, errors.ErrDatabase.WithError(err)
+	}
+
+	// Apply sorting
+	if params.SortBy != "" {
+		direction := "asc"
+		if params.SortDir != "" {
+			direction = params.SortDir
+		}
+		query = query.Order(fmt.Sprintf("%s %s", params.SortBy, direction))
+	}
+
+	// Apply pagination
+	query = query.Offset(params.Offset).Limit(params.Limit)
+
+	// Execute query
+	if err := query.Find(&{{.Resource}}s).Error; err != nil {
+		r.logger.Error("failed to list {{.Resource}}s", zap.Error(err))
+		return nil, 0, errors.ErrDatabase.WithError(err)
+	}
+
+	return {{.Resource}}s, total, nil
+} 

@@ -1,0 +1,186 @@
+package security
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"strconv"
+	"sync"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+)
+
+type RateLimitConfig struct {
+	RequestsPerMinute int
+	BurstSize         int
+	KeyPrefix        string
+	BlockDuration    time.Duration
+}
+
+var DefaultRateLimitConfig = RateLimitConfig{
+	RequestsPerMinute: 60,
+	BurstSize:         10,
+	KeyPrefix:        "ratelimit:",
+	BlockDuration:    5 * time.Minute,
+}
+
+type RateLimiter interface {
+	Allow(ctx context.Context, key string) (bool, error)
+	Reset(ctx context.Context, key string) error
+}
+
+type RedisRateLimiter struct {
+	client *redis.Client
+	config RateLimitConfig
+}
+
+func NewRedisRateLimiter(client *redis.Client, config RateLimitConfig) *RedisRateLimiter {
+	return &RedisRateLimiter{
+		client: client,
+		config: config,
+	}
+}
+
+func (r *RedisRateLimiter) Allow(ctx context.Context, key string) (bool, error) {
+	now := time.Now()
+	windowStart := now.Add(-time.Minute)
+
+	// Get current count
+	count, err := r.client.Get(ctx, r.config.KeyPrefix+key).Int()
+	if err != nil && err != redis.Nil {
+		return false, err
+	}
+
+	// Check if blocked
+	blocked, err := r.client.Get(ctx, r.config.KeyPrefix+key+":blocked").Bool()
+	if err != nil && err != redis.Nil {
+		return false, err
+	}
+	if blocked {
+		return false, nil
+	}
+
+	// Check rate limit
+	if count >= r.config.RequestsPerMinute {
+		// Block the key
+		err = r.client.Set(ctx, r.config.KeyPrefix+key+":blocked", true, r.config.BlockDuration).Err()
+		if err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+
+	// Increment counter
+	err = r.client.Incr(ctx, r.config.KeyPrefix+key).Err()
+	if err != nil {
+		return false, err
+	}
+
+	// Set expiration if this is the first request
+	if count == 0 {
+		err = r.client.Expire(ctx, r.config.KeyPrefix+key, time.Minute).Err()
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return true, nil
+}
+
+func (r *RedisRateLimiter) Reset(ctx context.Context, key string) error {
+	return r.client.Del(ctx, r.config.KeyPrefix+key, r.config.KeyPrefix+key+":blocked").Err()
+}
+
+type MemoryRateLimiter struct {
+	requests map[string]*requestCounter
+	mu       sync.RWMutex
+	config   RateLimitConfig
+}
+
+type requestCounter struct {
+	count     int
+	windowEnd time.Time
+	blocked   bool
+	blockEnd  time.Time
+}
+
+func NewMemoryRateLimiter(config RateLimitConfig) *MemoryRateLimiter {
+	return &MemoryRateLimiter{
+		requests: make(map[string]*requestCounter),
+		config:   config,
+	}
+}
+
+func (m *MemoryRateLimiter) Allow(ctx context.Context, key string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	counter, exists := m.requests[key]
+
+	if !exists {
+		m.requests[key] = &requestCounter{
+			count:     1,
+			windowEnd: now.Add(time.Minute),
+		}
+		return true, nil
+	}
+
+	// Check if blocked
+	if counter.blocked {
+		if now.After(counter.blockEnd) {
+			counter.blocked = false
+			counter.count = 0
+			counter.windowEnd = now.Add(time.Minute)
+		} else {
+			return false, nil
+		}
+	}
+
+	// Reset counter if window has passed
+	if now.After(counter.windowEnd) {
+		counter.count = 0
+		counter.windowEnd = now.Add(time.Minute)
+	}
+
+	// Check rate limit
+	if counter.count >= m.config.RequestsPerMinute {
+		counter.blocked = true
+		counter.blockEnd = now.Add(m.config.BlockDuration)
+		return false, nil
+	}
+
+	counter.count++
+	return true, nil
+}
+
+func (m *MemoryRateLimiter) Reset(ctx context.Context, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.requests, key)
+	return nil
+}
+
+func RateLimit(limiter RateLimiter, config RateLimitConfig) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		key := c.ClientIP() // You can customize this to use other identifiers
+
+		allowed, err := limiter.Allow(c.Request.Context(), key)
+		if err != nil {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		if !allowed {
+			c.Header("X-RateLimit-Limit", strconv.Itoa(config.RequestsPerMinute))
+			c.Header("X-RateLimit-Remaining", "0")
+			c.Header("Retry-After", config.BlockDuration.String())
+			c.AbortWithStatus(http.StatusTooManyRequests)
+			return
+		}
+
+		c.Next()
+	}
+} 

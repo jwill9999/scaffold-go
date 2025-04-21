@@ -1,0 +1,276 @@
+package metrics
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"{{.Module}}/internal/config"
+)
+
+var (
+	namespace = "app"
+)
+
+type Client struct {
+	config     *config.MetricsConfig
+	registry   *prometheus.Registry
+	httpServer *http.Server
+
+	// Standard metrics
+	requestDuration *prometheus.HistogramVec
+	requestTotal    *prometheus.CounterVec
+	errorTotal      *prometheus.CounterVec
+	activeRequests  prometheus.Gauge
+
+	// Database metrics
+	dbConnections    prometheus.Gauge
+	dbQueryDuration  *prometheus.HistogramVec
+	dbErrorTotal     *prometheus.CounterVec
+	dbTransactions   *prometheus.CounterVec
+
+	// Custom business metrics
+	customCounters   map[string]*prometheus.CounterVec
+	customGauges     map[string]prometheus.Gauge
+	customHistograms map[string]*prometheus.HistogramVec
+}
+
+// NewClient creates a new metrics client
+func NewClient(cfg *config.MetricsConfig) (*Client, error) {
+	if !cfg.Enabled {
+		return nil, nil
+	}
+
+	registry := prometheus.NewRegistry()
+	namespace = cfg.ServiceName
+
+	client := &Client{
+		config:           cfg,
+		registry:         registry,
+		customCounters:   make(map[string]*prometheus.CounterVec),
+		customGauges:     make(map[string]prometheus.Gauge),
+		customHistograms: make(map[string]*prometheus.HistogramVec),
+	}
+
+	// Initialize standard metrics
+	client.initializeStandardMetrics()
+
+	// Start metrics server
+	if err := client.startServer(); err != nil {
+		return nil, fmt.Errorf("failed to start metrics server: %w", err)
+	}
+
+	return client, nil
+}
+
+// initializeStandardMetrics sets up the default metrics
+func (c *Client) initializeStandardMetrics() {
+	// HTTP metrics
+	c.requestDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: namespace,
+			Name:      "http_request_duration_seconds",
+			Help:      "Duration of HTTP requests in seconds",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"method", "path", "status"},
+	)
+
+	c.requestTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "http_requests_total",
+			Help:      "Total number of HTTP requests",
+		},
+		[]string{"method", "path", "status"},
+	)
+
+	c.errorTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "errors_total",
+			Help:      "Total number of errors",
+		},
+		[]string{"type"},
+	)
+
+	c.activeRequests = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "active_requests",
+			Help:      "Number of active requests",
+		},
+	)
+
+	// Database metrics
+	c.dbConnections = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: namespace,
+			Name:      "db_connections",
+			Help:      "Number of active database connections",
+		},
+	)
+
+	c.dbQueryDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: namespace,
+			Name:      "db_query_duration_seconds",
+			Help:      "Duration of database queries in seconds",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"operation"},
+	)
+
+	c.dbErrorTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "db_errors_total",
+			Help:      "Total number of database errors",
+		},
+		[]string{"operation"},
+	)
+
+	c.dbTransactions = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      "db_transactions_total",
+			Help:      "Total number of database transactions",
+		},
+		[]string{"status"},
+	)
+
+	// Register metrics with registry
+	c.registry.MustRegister(
+		c.requestDuration,
+		c.requestTotal,
+		c.errorTotal,
+		c.activeRequests,
+		c.dbConnections,
+		c.dbQueryDuration,
+		c.dbErrorTotal,
+		c.dbTransactions,
+	)
+}
+
+// startServer starts the metrics HTTP server
+func (c *Client) startServer() error {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.HandlerFor(c.registry, promhttp.HandlerOpts{}))
+
+	c.httpServer = &http.Server{
+		Addr:    c.config.Endpoint,
+		Handler: mux,
+	}
+
+	go func() {
+		if err := c.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("Metrics server error: %v", err)
+		}
+	}()
+
+	return nil
+}
+
+// MeasureOperation measures the duration of an operation
+func (c *Client) MeasureOperation(operation string) func() {
+	if c == nil {
+		return func() {}
+	}
+
+	start := time.Now()
+	return func() {
+		duration := time.Since(start).Seconds()
+		c.dbQueryDuration.WithLabelValues(operation).Observe(duration)
+	}
+}
+
+// RecordError increments the error counter
+func (c *Client) RecordError(errorType string) {
+	if c == nil {
+		return
+	}
+	c.errorTotal.WithLabelValues(errorType).Inc()
+}
+
+// RecordDBError increments the database error counter
+func (c *Client) RecordDBError(operation string) {
+	if c == nil {
+		return
+	}
+	c.dbErrorTotal.WithLabelValues(operation).Inc()
+}
+
+// RecordRequest records HTTP request metrics
+func (c *Client) RecordRequest(method, path string, status int, duration time.Duration) {
+	if c == nil {
+		return
+	}
+	statusStr := fmt.Sprintf("%d", status)
+	c.requestDuration.WithLabelValues(method, path, statusStr).Observe(duration.Seconds())
+	c.requestTotal.WithLabelValues(method, path, statusStr).Inc()
+}
+
+// SetDBConnections sets the number of active database connections
+func (c *Client) SetDBConnections(count int) {
+	if c == nil {
+		return
+	}
+	c.dbConnections.Set(float64(count))
+}
+
+// RecordTransaction records a database transaction
+func (c *Client) RecordTransaction(status string) {
+	if c == nil {
+		return
+	}
+	c.dbTransactions.WithLabelValues(status).Inc()
+}
+
+// RegisterCustomCounter registers a new custom counter metric
+func (c *Client) RegisterCustomCounter(name, help string, labels []string) error {
+	if c == nil {
+		return nil
+	}
+
+	counter := promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: namespace,
+			Name:      name,
+			Help:      help,
+		},
+		labels,
+	)
+
+	c.customCounters[name] = counter
+	return nil
+}
+
+// IncrementCustomCounter increments a custom counter
+func (c *Client) IncrementCustomCounter(name string, labelValues ...string) {
+	if c == nil {
+		return
+	}
+
+	if counter, ok := c.customCounters[name]; ok {
+		counter.WithLabelValues(labelValues...).Inc()
+	}
+}
+
+// Close shuts down the metrics server
+func (c *Client) Close() error {
+	if c == nil || c.httpServer == nil {
+		return nil
+	}
+	return c.httpServer.Close()
+}
+
+// Handler returns the Prometheus HTTP handler
+func (c *Client) Handler() http.Handler {
+	if c == nil {
+		return http.NotFoundHandler()
+	}
+	return promhttp.HandlerFor(c.registry, promhttp.HandlerOpts{})
+} 

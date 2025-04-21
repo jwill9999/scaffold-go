@@ -1,0 +1,91 @@
+package cache
+
+import (
+	"context"
+	"time"
+
+	"github.com/redis/go-redis/v9"
+)
+
+// RedisCache implements the Cache interface using Redis
+type RedisCache struct {
+	client *redis.Client
+}
+
+// NewRedisCache creates a new Redis cache instance
+func NewRedisCache(addr string, password string, db int) (*RedisCache, error) {
+	client := redis.NewClient(&redis.Options{
+		Addr:     addr,
+		Password: password,
+		DB:       db,
+	})
+
+	// Test connection
+	ctx := context.Background()
+	if err := client.Ping(ctx).Err(); err != nil {
+		return nil, err
+	}
+
+	return &RedisCache{client: client}, nil
+}
+
+// Set stores a value in Redis with the specified TTL
+func (c *RedisCache) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	return c.client.Set(ctx, key, value, ttl).Err()
+}
+
+// Get retrieves a value from Redis
+func (c *RedisCache) Get(ctx context.Context, key string, value interface{}) error {
+	err := c.client.Get(ctx, key).Scan(value)
+	if err == redis.Nil {
+		return ErrCacheMiss
+	}
+	return err
+}
+
+// Delete removes a value from Redis
+func (c *RedisCache) Delete(ctx context.Context, key string) error {
+	return c.client.Del(ctx, key).Err()
+}
+
+// Exists checks if a key exists in Redis
+func (c *RedisCache) Exists(ctx context.Context, key string) (bool, error) {
+	exists, err := c.client.Exists(ctx, key).Result()
+	return exists > 0, err
+}
+
+// Increment increases the value of a key by the specified amount
+func (c *RedisCache) Increment(ctx context.Context, key string, value int64) (int64, error) {
+	return c.client.IncrBy(ctx, key, value).Result()
+}
+
+// Decrement decreases the value of a key by the specified amount
+func (c *RedisCache) Decrement(ctx context.Context, key string, value int64) (int64, error) {
+	return c.client.DecrBy(ctx, key, value).Result()
+}
+
+// SetNX sets a value only if the key does not exist
+func (c *RedisCache) SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) (bool, error) {
+	return c.client.SetNX(ctx, key, value, ttl).Result()
+}
+
+// GetSet gets the current value and sets a new value atomically
+func (c *RedisCache) GetSet(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	pipe := c.client.Pipeline()
+	get := pipe.Get(ctx, key)
+	set := pipe.Set(ctx, key, value, ttl)
+	_, err := pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		return err
+	}
+
+	if err := get.Scan(value); err != nil && err != redis.Nil {
+		return err
+	}
+	return nil
+}
+
+// Close closes the Redis connection
+func (c *RedisCache) Close() error {
+	return c.client.Close()
+} 

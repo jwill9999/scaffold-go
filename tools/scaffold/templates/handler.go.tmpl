@@ -1,0 +1,206 @@
+package handlers
+
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
+
+	"{{.Module}}/internal/models"
+	"{{.Module}}/internal/services"
+	"{{.Module}}/pkg/errors"
+)
+
+// {{.Name}}Handler handles HTTP requests for {{.Resource}}
+type {{.Name}}Handler struct {
+	service services.{{.Name}}Service
+	logger  *zap.Logger
+}
+
+// New{{.Name}}Handler creates a new {{.Name}}Handler
+func New{{.Name}}Handler(service services.{{.Name}}Service, logger *zap.Logger) *{{.Name}}Handler {
+	return &{{.Name}}Handler{
+		service: service,
+		logger:  logger.With(zap.String("handler", "{{.Resource}}")),
+	}
+}
+
+// Register registers the routes for {{.Name}}Handler
+func (h *{{.Name}}Handler) Register(r *gin.RouterGroup) {
+	{{.Resource}} := r.Group("/{{.Resource}}s")
+	{
+		{{.Resource}}.POST("", h.Create)
+		{{.Resource}}.GET("", h.List)
+		{{.Resource}}.GET("/:id", h.GetByID)
+		{{.Resource}}.PUT("/:id", h.Update)
+		{{.Resource}}.DELETE("/:id", h.Delete)
+	}
+}
+
+// Create handles POST /{{.Resource}}s
+// @Summary Create a new {{.Resource}}
+// @Description Create a new {{.Resource}} with the provided input
+// @Tags {{.Resource}}s
+// @Accept json
+// @Produce json
+// @Param input body models.{{.Name}}Input true "{{.Name}} input"
+// @Success 201 {object} models.{{.Name}} "Created {{.Resource}}"
+// @Failure 400 {object} errors.Error "Invalid input"
+// @Failure 500 {object} errors.Error "Internal server error"
+// @Router /{{.Resource}}s [post]
+func (h *{{.Name}}Handler) Create(c *gin.Context) {
+	var input models.{{.Name}}Input
+	if err := c.ShouldBindJSON(&input); err != nil {
+		h.logger.Error("failed to bind input", zap.Error(err))
+		c.JSON(http.StatusBadRequest, errors.NewError(err))
+		return
+	}
+
+	{{.Resource}}, err := h.service.Create(c.Request.Context(), &input)
+	if err != nil {
+		h.logger.Error("failed to create {{.Resource}}", zap.Error(err))
+		c.JSON(errors.HTTPStatus(err), errors.NewError(err))
+		return
+	}
+
+	c.JSON(http.StatusCreated, {{.Resource}})
+}
+
+// GetByID handles GET /{{.Resource}}s/:id
+// @Summary Get a {{.Resource}} by ID
+// @Description Get a {{.Resource}} by its ID
+// @Tags {{.Resource}}s
+// @Produce json
+// @Param id path int true "{{.Name}} ID"
+// @Success 200 {object} models.{{.Name}} "{{.Name}} found"
+// @Failure 404 {object} errors.Error "{{.Name}} not found"
+// @Failure 500 {object} errors.Error "Internal server error"
+// @Router /{{.Resource}}s/{id} [get]
+func (h *{{.Name}}Handler) GetByID(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		h.logger.Error("invalid id", zap.Error(err))
+		c.JSON(http.StatusBadRequest, errors.NewError(err))
+		return
+	}
+
+	{{.Resource}}, err := h.service.GetByID(c.Request.Context(), uint(id))
+	if err != nil {
+		h.logger.Error("failed to get {{.Resource}}", zap.Error(err))
+		c.JSON(errors.HTTPStatus(err), errors.NewError(err))
+		return
+	}
+
+	c.JSON(http.StatusOK, {{.Resource}})
+}
+
+// Update handles PUT /{{.Resource}}s/:id
+// @Summary Update a {{.Resource}}
+// @Description Update a {{.Resource}} with the provided input
+// @Tags {{.Resource}}s
+// @Accept json
+// @Produce json
+// @Param id path int true "{{.Name}} ID"
+// @Param input body models.{{.Name}}Input true "{{.Name}} input"
+// @Success 200 {object} models.{{.Name}} "Updated {{.Resource}}"
+// @Failure 400 {object} errors.Error "Invalid input"
+// @Failure 404 {object} errors.Error "{{.Name}} not found"
+// @Failure 500 {object} errors.Error "Internal server error"
+// @Router /{{.Resource}}s/{id} [put]
+func (h *{{.Name}}Handler) Update(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		h.logger.Error("invalid id", zap.Error(err))
+		c.JSON(http.StatusBadRequest, errors.NewError(err))
+		return
+	}
+
+	var input models.{{.Name}}Input
+	if err := c.ShouldBindJSON(&input); err != nil {
+		h.logger.Error("failed to bind input", zap.Error(err))
+		c.JSON(http.StatusBadRequest, errors.NewError(err))
+		return
+	}
+
+	{{.Resource}}, err := h.service.Update(c.Request.Context(), uint(id), &input)
+	if err != nil {
+		h.logger.Error("failed to update {{.Resource}}", zap.Error(err))
+		c.JSON(errors.HTTPStatus(err), errors.NewError(err))
+		return
+	}
+
+	c.JSON(http.StatusOK, {{.Resource}})
+}
+
+// Delete handles DELETE /{{.Resource}}s/:id
+// @Summary Delete a {{.Resource}}
+// @Description Delete a {{.Resource}} by its ID
+// @Tags {{.Resource}}s
+// @Param id path int true "{{.Name}} ID"
+// @Success 204 "No Content"
+// @Failure 404 {object} errors.Error "{{.Name}} not found"
+// @Failure 500 {object} errors.Error "Internal server error"
+// @Router /{{.Resource}}s/{id} [delete]
+func (h *{{.Name}}Handler) Delete(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		h.logger.Error("invalid id", zap.Error(err))
+		c.JSON(http.StatusBadRequest, errors.NewError(err))
+		return
+	}
+
+	if err := h.service.Delete(c.Request.Context(), uint(id)); err != nil {
+		h.logger.Error("failed to delete {{.Resource}}", zap.Error(err))
+		c.JSON(errors.HTTPStatus(err), errors.NewError(err))
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// List handles GET /{{.Resource}}s
+// @Summary List {{.Resource}}s
+// @Description List {{.Resource}}s with pagination and filters
+// @Tags {{.Resource}}s
+// @Produce json
+// @Param offset query int false "Offset"
+// @Param limit query int false "Limit"
+// @Param sort_by query string false "Sort by field"
+// @Param sort_dir query string false "Sort direction (asc/desc)"
+// @Success 200 {object} models.PaginatedResponse "List of {{.Resource}}s"
+// @Failure 400 {object} errors.Error "Invalid parameters"
+// @Failure 500 {object} errors.Error "Internal server error"
+// @Router /{{.Resource}}s [get]
+func (h *{{.Name}}Handler) List(c *gin.Context) {
+	params := &models.ListParams{
+		Offset:  0,
+		Limit:   10,
+		SortBy:  c.Query("sort_by"),
+		SortDir: c.Query("sort_dir"),
+	}
+
+	if offset := c.Query("offset"); offset != "" {
+		if val, err := strconv.Atoi(offset); err == nil {
+			params.Offset = val
+		}
+	}
+
+	if limit := c.Query("limit"); limit != "" {
+		if val, err := strconv.Atoi(limit); err == nil {
+			params.Limit = val
+		}
+	}
+
+	{{.Resource}}s, pagination, err := h.service.List(c.Request.Context(), params)
+	if err != nil {
+		h.logger.Error("failed to list {{.Resource}}s", zap.Error(err))
+		c.JSON(errors.HTTPStatus(err), errors.NewError(err))
+		return
+	}
+
+	c.JSON(http.StatusOK, models.PaginatedResponse{
+		Data:       {{.Resource}}s,
+		Pagination: *pagination,
+	})
+} 

@@ -1,0 +1,27 @@
+1.0.0
+
+Template Versions:
+- config.go.tmpl: 1.0.0
+- docker-compose.yml.tmpl: 1.0.0
+- Dockerfile.tmpl: 1.0.0
+- errors.go.tmpl: 1.0.0
+- handler.go.tmpl: 1.0.0
+- logger.go.tmpl: 1.0.0
+- main.go.tmpl: 1.0.0
+- metrics.go.tmpl: 1.0.0
+- middleware.go.tmpl: 1.0.0
+- migration.go.tmpl: 1.0.0
+- migration.sql.tmpl: 1.0.0
+- mock.go.tmpl: 1.0.0
+- model.go.tmpl: 1.0.0
+- project.go.tmpl: 1.0.0
+- prometheus.yml.tmpl: 1.0.0
+- README.md.tmpl: 1.0.0
+- repository.go.tmpl: 1.0.0
+- server.go.tmpl: 1.0.0
+- service.go.tmpl: 1.0.0
+- swagger.yaml.tmpl: 1.0.0
+- test.go.tmpl: 1.0.0
+- .env.example.tmpl: 1.0.0
+
+Last Updated: 2024-03-20 

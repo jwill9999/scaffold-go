@@ -1,0 +1,40 @@
+//go:generate go run go.uber.org/mock/mockgen -package mock -destination ../mock/{{.Name}}_mock.go {{.Module}}/{{.Package}} {{.Interface}}
+
+package {{.Package}}
+
+// This file is used to generate mocks for testing.
+// Run `go generate ./...` to generate mocks.
+
+/*
+Example usage:
+
+//go:generate go run go.uber.org/mock/mockgen -package mock -destination ../mock/repository_mock.go {{.Module}}/internal/repository Repository
+//go:generate go run go.uber.org/mock/mockgen -package mock -destination ../mock/service_mock.go {{.Module}}/internal/service Service
+//go:generate go run go.uber.org/mock/mockgen -package mock -destination ../mock/logger_mock.go {{.Module}}/pkg/logger Logger
+*/
+
+// Mock example:
+/*
+func TestUserService_Create(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRepo := mock.NewMockRepository(ctrl)
+	mockLogger := mock.NewMockLogger(ctrl)
+
+	service := NewUserService(mockRepo, mockLogger)
+
+	// Setup expectations
+	mockRepo.EXPECT().
+		Create(gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	// Execute
+	err := service.Create(context.Background(), &User{
+		Email: "test@example.com",
+	})
+
+	// Assert
+	assert.NoError(t, err)
+}
+*/ 

@@ -1,0 +1,38 @@
+groups:
+  - name: ${APP_NAME}
+    rules:
+      - alert: HighRequestLatency
+        expr: http_request_duration_seconds{quantile="0.9"} > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High request latency on {{ $labels.instance }}"
+          description: "{{ $labels.instance }} has a 90th percentile latency above 1s"
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate on {{ $labels.instance }}"
+          description: "Error rate is above 10% (current value: {{ $value }})"
+
+      - alert: HighMemoryUsage
+        expr: (process_resident_memory_bytes / process_resident_memory_bytes{quantile="0.95"}) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is above 80% of typical maximum"
+
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.instance }} is down"
+          description: "{{ $labels.instance }} of job {{ $labels.job }} has been down for more than 1 minute" 

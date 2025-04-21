@@ -1,0 +1,204 @@
+package models
+
+import (
+	"time"
+	"encoding/json"
+
+	"gorm.io/gorm"
+	"github.com/go-playground/validator/v10"
+)
+
+var validate = validator.New()
+
+// Base contains common fields for all models
+type Base struct {
+	ID        uint           `gorm:"primarykey" json:"id"`
+	CreatedAt time.Time      `gorm:"not null" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"not null" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
+}
+
+// {{.Name}} represents the {{.Resource}} model
+type {{.Name}} struct {
+	Base
+	// Add your fields here
+	{{range .Fields}}
+	{{.Name}} {{.Type}} `gorm:"{{.GormTags}}" json:"{{.JSONName}}" validate:"{{.Validation}}"`
+	{{end}}
+}
+
+// {{.Name}}Input represents the input for creating/updating a {{.Resource}}
+type {{.Name}}Input struct {
+	{{range .Fields}}
+	{{.Name}} {{.Type}} `json:"{{.JSONName}}" validate:"{{.Validation}}"`
+	{{end}}
+}
+
+// TableName returns the table name for the model
+func ({{.Name}}) TableName() string {
+	return "{{.TableName}}"
+}
+
+// BeforeCreate is called before creating a new record
+func (m *{{.Name}}) BeforeCreate(tx *gorm.DB) error {
+	m.CreatedAt = time.Now()
+	m.UpdatedAt = time.Now()
+	return m.Validate()
+}
+
+// BeforeUpdate is called before updating a record
+func (m *{{.Name}}) BeforeUpdate(tx *gorm.DB) error {
+	m.UpdatedAt = time.Now()
+	return m.Validate()
+}
+
+// Validate validates the model
+func (m *{{.Name}}) Validate() error {
+	if err := validate.Struct(m); err != nil {
+		return err
+	}
+	return nil
+}
+
+// FromInput creates a new model from input
+func (m *{{.Name}}) FromInput(input *{{.Name}}Input) {
+	{{range .Fields}}
+	m.{{.Name}} = input.{{.Name}}
+	{{end}}
+}
+
+// ToJSON converts the model to JSON
+func (m *{{.Name}}) ToJSON() ([]byte, error) {
+	return json.Marshal(m)
+}
+
+// ListParams represents parameters for listing {{.Resource}}s
+type ListParams struct {
+	Offset  int               `json:"offset"`
+	Limit   int               `json:"limit"`
+	SortBy  string           `json:"sort_by,omitempty"`
+	SortDir string           `json:"sort_dir,omitempty"`
+	Filters map[string]any   `json:"filters,omitempty"`
+}
+
+// Pagination represents pagination metadata
+type Pagination struct {
+	Total  int64 `json:"total"`
+	Offset int   `json:"offset"`
+	Limit  int   `json:"limit"`
+}
+
+// PaginatedResponse represents a paginated response
+type PaginatedResponse struct {
+	Data       any        `json:"data"`
+	Pagination Pagination `json:"pagination"`
+}
+
+// Example User Model
+type User struct {
+	Base
+	Email     string    `gorm:"type:varchar(255);uniqueIndex;not null" json:"email" validate:"required,email"`
+	Password  string    `gorm:"type:varchar(255);not null" json:"-" validate:"required,min=8"`
+	FirstName string    `gorm:"type:varchar(100)" json:"first_name" validate:"required"`
+	LastName  string    `gorm:"type:varchar(100)" json:"last_name" validate:"required"`
+	Role      string    `gorm:"type:varchar(50);default:'user'" json:"role" validate:"required,oneof=admin user"`
+	Active    bool      `gorm:"default:true" json:"active"`
+	LastLogin time.Time `json:"last_login,omitempty"`
+}
+
+// UserInput represents the input for creating/updating a user
+type UserInput struct {
+	Email     string `json:"email" validate:"required,email"`
+	Password  string `json:"password,omitempty" validate:"omitempty,min=8"`
+	FirstName string `json:"first_name" validate:"required"`
+	LastName  string `json:"last_name" validate:"required"`
+	Role      string `json:"role,omitempty" validate:"omitempty,oneof=admin user"`
+	Active    *bool  `json:"active,omitempty"`
+}
+
+// Example Post Model
+type Post struct {
+	Base
+	Title     string    `gorm:"type:varchar(255);not null" json:"title" validate:"required,min=3"`
+	Content   string    `gorm:"type:text" json:"content" validate:"required"`
+	UserID    uint      `gorm:"not null" json:"user_id" validate:"required"`
+	User      User      `gorm:"foreignKey:UserID" json:"user"`
+	Tags      []Tag     `gorm:"many2many:post_tags;" json:"tags"`
+	Published bool      `gorm:"default:false" json:"published"`
+	PublishAt time.Time `json:"publish_at,omitempty"`
+}
+
+// PostInput represents the input for creating/updating a post
+type PostInput struct {
+	Title     string    `json:"title" validate:"required,min=3"`
+	Content   string    `json:"content" validate:"required"`
+	TagIDs    []uint    `json:"tag_ids,omitempty"`
+	Published bool      `json:"published"`
+	PublishAt time.Time `json:"publish_at,omitempty"`
+}
+
+// Example Tag Model
+type Tag struct {
+	Base
+	Name  string `gorm:"type:varchar(50);uniqueIndex;not null" json:"name" validate:"required,min=2"`
+	Posts []Post `gorm:"many2many:post_tags;" json:"posts,omitempty"`
+}
+
+// TagInput represents the input for creating/updating a tag
+type TagInput struct {
+	Name string `json:"name" validate:"required,min=2"`
+}
+
+// Example Comment Model
+type Comment struct {
+	Base
+	Content string `gorm:"type:text;not null" json:"content" validate:"required"`
+	UserID  uint   `gorm:"not null" json:"user_id" validate:"required"`
+	User    User   `gorm:"foreignKey:UserID" json:"user"`
+	PostID  uint   `gorm:"not null" json:"post_id" validate:"required"`
+	Post    Post   `gorm:"foreignKey:PostID" json:"post"`
+}
+
+// CommentInput represents the input for creating/updating a comment
+type CommentInput struct {
+	Content string `json:"content" validate:"required"`
+}
+
+// Example Product model showing relationships
+type Product struct {
+	Base
+	Name        string    `json:"name" gorm:"not null"`
+	Description string    `json:"description"`
+	Price       float64   `json:"price" gorm:"type:decimal(10,2);not null"`
+	SKU         string    `json:"sku" gorm:"uniqueIndex;not null"`
+	UserID      uint      `json:"user_id" gorm:"not null"`
+	User        User      `json:"user" gorm:"foreignKey:UserID"`
+	Categories  []Category `json:"categories" gorm:"many2many:product_categories;"`
+}
+
+// TableName specifies the table name for Product
+func (Product) TableName() string {
+	return "products"
+}
+
+// Category model for demonstration of relationships
+type Category struct {
+	Base
+	Name        string    `json:"name" gorm:"uniqueIndex;not null"`
+	Description string    `json:"description"`
+	Products    []Product `json:"products" gorm:"many2many:product_categories;"`
+}
+
+// TableName specifies the table name for Category
+func (Category) TableName() string {
+	return "categories"
+}
+
+// Migration helper to auto-migrate all models
+func AutoMigrate(db *gorm.DB) error {
+	return db.AutoMigrate(
+		&User{},
+		&Product{},
+		&Category{},
+	)
+} 

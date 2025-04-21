@@ -1,0 +1,147 @@
+package errors
+
+import (
+	"fmt"
+	"net/http"
+)
+
+// Error represents a domain error
+type Error struct {
+	Code    string                 `json:"code"`
+	Message string                 `json:"message"`
+	Details map[string]interface{} `json:"details,omitempty"`
+	err     error                 `json:"-"`
+}
+
+// Error returns the error message
+func (e *Error) Error() string {
+	if e.err != nil {
+		return fmt.Sprintf("%s: %v", e.Message, e.err)
+	}
+	return e.Message
+}
+
+// WithError wraps the error
+func (e *Error) WithError(err error) *Error {
+	return &Error{
+		Code:    e.Code,
+		Message: e.Message,
+		Details: e.Details,
+		err:     err,
+	}
+}
+
+// WithDetail adds a detail to the error
+func (e *Error) WithDetail(key string, value interface{}) *Error {
+	details := make(map[string]interface{})
+	if e.Details != nil {
+		for k, v := range e.Details {
+			details[k] = v
+		}
+	}
+	details[key] = value
+
+	return &Error{
+		Code:    e.Code,
+		Message: e.Message,
+		Details: details,
+		err:     e.err,
+	}
+}
+
+// Unwrap returns the wrapped error
+func (e *Error) Unwrap() error {
+	return e.err
+}
+
+// Standard error definitions
+var (
+	ErrInvalidInput = &Error{
+		Code:    "INVALID_INPUT",
+		Message: "Invalid input provided",
+	}
+
+	ErrNotFound = &Error{
+		Code:    "NOT_FOUND",
+		Message: "Resource not found",
+	}
+
+	ErrUnauthorized = &Error{
+		Code:    "UNAUTHORIZED",
+		Message: "Authentication required",
+	}
+
+	ErrForbidden = &Error{
+		Code:    "FORBIDDEN",
+		Message: "Permission denied",
+	}
+
+	ErrConflict = &Error{
+		Code:    "CONFLICT",
+		Message: "Resource conflict",
+	}
+
+	ErrInternalServer = &Error{
+		Code:    "INTERNAL_SERVER_ERROR",
+		Message: "Internal server error",
+	}
+
+	ErrValidation = &Error{
+		Code:    "VALIDATION_ERROR",
+		Message: "Validation error",
+	}
+
+	ErrDatabase = &Error{
+		Code:    "DATABASE_ERROR",
+		Message: "Database error",
+	}
+
+	ErrNotImplemented = &Error{
+		Code:    "NOT_IMPLEMENTED",
+		Message: "Feature not implemented",
+	}
+)
+
+// HTTPStatus returns the appropriate HTTP status code for an error
+func HTTPStatus(err error) int {
+	var e *Error
+	if !As(err, &e) {
+		return http.StatusInternalServerError
+	}
+
+	switch e.Code {
+	case ErrInvalidInput.Code, ErrValidation.Code:
+		return http.StatusBadRequest
+	case ErrUnauthorized.Code:
+		return http.StatusUnauthorized
+	case ErrForbidden.Code:
+		return http.StatusForbidden
+	case ErrNotFound.Code:
+		return http.StatusNotFound
+	case ErrConflict.Code:
+		return http.StatusConflict
+	case ErrNotImplemented.Code:
+		return http.StatusNotImplemented
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+// NewError creates a new Error
+func NewError(err error) *Error {
+	var e *Error
+	if As(err, &e) {
+		return e
+	}
+	return ErrInternalServer.WithError(err)
+}
+
+// Is reports whether any error in err's chain matches target
+func Is(err, target error) bool {
+	return fmt.Is(err, target)
+}
+
+// As finds the first error in err's chain that matches target
+func As(err error, target interface{}) bool {
+	return fmt.As(err, target)
+} 
