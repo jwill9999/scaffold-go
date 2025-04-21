@@ -1,4 +1,4 @@
-1.0.0
+0.0.1
 
 Template Versions:
 - config.go.tmpl: 1.0.0
@@ -24,4 +24,5 @@ Template Versions:
 - test.go.tmpl: 1.0.0
 - .env.example.tmpl: 1.0.0
 
-Last Updated: 2024-03-20 
+Last Updated: 2024-04-21
+Release Date: 2024-04-21 

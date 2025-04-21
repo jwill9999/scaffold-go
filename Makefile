@@ -7,7 +7,7 @@ GOCMD=go
 GOBUILD=$(GOCMD) build
 GOTEST=$(GOCMD) test
 BINARY_NAME=go-scaffold
-VERSION?=1.0.0
+VERSION?=0.0.1
 BUILD_DIR=bin
 LDFLAGS=-ldflags "-X main.Version=$(VERSION)"
 
@@ -48,18 +48,18 @@ prod-status:
 # Check database tables
 prod-db-check:
 	@echo "List of tables in the database:"
-	@$(COMPOSE_PROD) exec postgres psql -U postgres -d dockergo -c "\dt" | cat
+	@$(COMPOSE_PROD) exec postgres psql -U postgres -d scaffold-go -c "\dt" | cat
 	@echo "\nDetailed table information:"
-	@$(COMPOSE_PROD) exec postgres psql -U postgres -d dockergo -c "\d+ users" | cat
+	@$(COMPOSE_PROD) exec postgres psql -U postgres -d scaffold-go -c "\d+ users" | cat
 
 # Check migration status
 prod-migrations-check:
 	@echo "Migration Status:"
-	@$(COMPOSE_PROD) exec postgres psql -U postgres -d dockergo -c "SELECT * FROM schema_migrations;" | cat
+	@$(COMPOSE_PROD) exec postgres psql -U postgres -d scaffold-go -c "SELECT * FROM schema_migrations;" | cat
 
 # Run a psql shell
 prod-db-shell:
-	$(COMPOSE_PROD) exec postgres psql -U postgres -d dockergo
+	$(COMPOSE_PROD) exec postgres psql -U postgres -d scaffold-go
 
 # Development environment commands
 dev-up:
@@ -84,16 +84,16 @@ dev-status:
 
 dev-db-check:
 	@echo "List of tables in the database:"
-	@$(COMPOSE_DEV) exec postgres psql -U postgres -d dockergo -c "\dt" | cat
+	@$(COMPOSE_DEV) exec postgres psql -U postgres -d scaffold-go -c "\dt" | cat
 	@echo "\nDetailed table information:"
-	@$(COMPOSE_DEV) exec postgres psql -U postgres -d dockergo -c "\d+ users" | cat
+	@$(COMPOSE_DEV) exec postgres psql -U postgres -d scaffold-go -c "\d+ users" | cat
 
 dev-migrations-check:
 	@echo "Migration Status:"
-	@$(COMPOSE_DEV) exec postgres psql -U postgres -d dockergo -c "SELECT * FROM schema_migrations;" | cat
+	@$(COMPOSE_DEV) exec postgres psql -U postgres -d scaffold-go -c "SELECT * FROM schema_migrations;" | cat
 
 dev-db-shell:
-	$(COMPOSE_DEV) exec postgres psql -U postgres -d dockergo
+	$(COMPOSE_DEV) exec postgres psql -U postgres -d scaffold-go
 
 # Test commands
 

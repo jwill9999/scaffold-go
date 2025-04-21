@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jwill9999/dockergo/tools/scaffold/generator"
+	"github.com/jwill9999/scaffold-go/tools/scaffold/generator"
 )
 
 type ProjectScaffold struct {
