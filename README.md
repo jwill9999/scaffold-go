@@ -11,6 +11,10 @@ A comprehensive scaffolding system for building production-ready Go API services
 - ✅ Configuration Management
 - ✅ Error Handling
 - ✅ Logging System
+- ✅ Middleware System
+- ✅ Migration System
+- ✅ Testing Framework
+- ✅ Mock Generation
 
 ### Security
 - ✅ CORS Middleware
@@ -30,10 +34,10 @@ A comprehensive scaffolding system for building production-ready Go API services
 - ❌ MySQL Implementation
 - ❌ MongoDB Implementation
 - ❌ SQLite Implementation
-- ❌ Migration System
-- ❌ Connection Pooling
-- ❌ Query Builders
-- ❌ Transaction Management
+- ✅ Migration System
+- ✅ Connection Pooling
+- ✅ Query Builders
+- ✅ Transaction Management
 
 ### Caching
 - ✅ Redis Implementation
@@ -41,16 +45,19 @@ A comprehensive scaffolding system for building production-ready Go API services
 - ✅ Cache Interface
 - ✅ TTL Management
 - ✅ Atomic Operations
+- ✅ Distributed Locking
 
 ### Monitoring
 - ✅ Prometheus Metrics
 - ✅ Jaeger Tracing
-- ❌ Custom Metric Collectors
+- ✅ Custom Metric Collectors
 - ❌ Alerting Rules
-- ❌ Dashboard Templates
+- ✅ Dashboard Templates
 - ❌ Log Aggregation
 
 ### API Features
+- ✅ Swagger/OpenAPI Documentation
+- ✅ Postman Collection Generation
 - ❌ Pagination
 - ❌ Filtering
 - ❌ Sorting
@@ -58,11 +65,18 @@ A comprehensive scaffolding system for building production-ready Go API services
 - ❌ Bulk Operations
 - ❌ Webhook Support
 
+### Infrastructure
+- ✅ Docker Configuration
+- ✅ Docker Compose Setup
+- ✅ Environment Configuration
+- ✅ Hot Reload Support
+- ✅ Multi-stage Builds
+
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/go-scaffold.git
+git clone https://github.com/jwill9999/scaffold-go.git
 
 # Install dependencies
 go mod download
@@ -113,43 +127,99 @@ make run
 
 ## Configuration
 
-The scaffolding system uses a layered configuration approach:
+The scaffolding system uses a layered configuration approach with environment variables and YAML files. Here's an example configuration:
 
 ```yaml
-app:
-  name: "my-api"
-  version: "1.0.0"
-  environment: "development"
-
+# config.yaml
 server:
   port: 8080
-  timeout: 30s
-  cors:
-    allowed_origins: ["*"]
-    allowed_methods: ["GET", "POST", "PUT", "DELETE"]
-    allowed_headers: ["Content-Type", "Authorization"]
+  host: "0.0.0.0"
+  read_timeout: 10s
+  write_timeout: 10s
+  idle_timeout: 60s
 
 database:
-  host: "localhost"
-  port: 5432
-  name: "mydb"
-  user: "user"
-  password: "password"
-  ssl_mode: "disable"
+  postgres:
+    host: "localhost"
+    port: 5432
+    user: "postgres"
+    password: "postgres"
+    dbname: "app"
+    sslmode: "disable"
+    max_connections: 25
+    max_idle_connections: 5
+    connection_lifetime: "1h"
 
 cache:
-  type: "redis"
-  host: "localhost"
-  port: 6379
-  password: ""
-  db: 0
+  redis:
+    host: "localhost"
+    port: 6379
+    password: ""
+    db: 0
+    pool_size: 10
+    min_idle_conns: 2
+    max_retries: 3
+    dial_timeout: "5s"
+    read_timeout: "3s"
+    write_timeout: "3s"
+
+  memory:
+    cleanup_interval: "1m"
+    default_ttl: "5m"
 
 security:
-  jwt_secret: "your-secret-key"
-  token_expiry: "24h"
+  jwt:
+    secret: "your-secret-key"
+    expiration: "24h"
+    refresh_expiration: "168h"  # 7 days
+
+  cors:
+    allowed_origins: ["*"]
+    allowed_methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allowed_headers: ["Origin", "Content-Type", "Accept", "Authorization"]
+    exposed_headers: ["Content-Length"]
+    allow_credentials: true
+    max_age: "12h"
+
   rate_limit:
     requests_per_minute: 60
     burst_size: 10
+    key_prefix: "rate_limit:"
+    block_duration: "5m"
+
+monitoring:
+  prometheus:
+    enabled: true
+    path: "/metrics"
+    port: 9090
+
+  jaeger:
+    enabled: true
+    host: "localhost"
+    port: 6831
+    service_name: "app"
+    sampler_type: "const"
+    sampler_param: 1
+
+logging:
+  level: "info"
+  format: "json"
+  output: "stdout"
+  file:
+    path: "logs/app.log"
+    max_size: 100
+    max_backups: 3
+    max_age: 7
+    compress: true
+```
+
+The configuration can be overridden using environment variables with the `APP_` prefix:
+
+```bash
+APP_SERVER_PORT=8080
+APP_DATABASE_POSTGRES_HOST=localhost
+APP_CACHE_REDIS_HOST=redis
+APP_SECURITY_JWT_SECRET=your-secret-key
 ```
 
 ## Development
