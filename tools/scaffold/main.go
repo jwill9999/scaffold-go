@@ -162,6 +162,8 @@ func (p *ProjectScaffold) createDirectories() error {
 func (p *ProjectScaffold) initGoModule() error {
 	cmd := exec.Command("go", "mod", "init", p.Module)
 	cmd.Dir = p.Name
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to initialize go module: %w", err)
 	}

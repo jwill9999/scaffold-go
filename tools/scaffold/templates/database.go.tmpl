@@ -1,0 +1,85 @@
+package database
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq" // PostgreSQL driver
+)
+
+// Config holds database configuration
+type Config struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+	DBName   string
+	SSLMode  string
+	Timeout  int // seconds
+}
+
+// Connection represents a database connection
+type Connection struct {
+	*sqlx.DB
+	Config *Config
+}
+
+// NewConnection creates a new database connection
+func NewConnection(config *Config) (*Connection, error) {
+	// If environment variables exist, they override config
+	if host := os.Getenv("DB_HOST"); host != "" {
+		config.Host = host
+	}
+
+	if portStr := os.Getenv("DB_PORT"); portStr != "" {
+		if port, err := strconv.Atoi(portStr); err == nil {
+			config.Port = port
+		}
+	}
+
+	if user := os.Getenv("DB_USER"); user != "" {
+		config.User = user
+	}
+
+	if password := os.Getenv("DB_PASSWORD"); password != "" {
+		config.Password = password
+	}
+
+	if dbName := os.Getenv("DB_NAME"); dbName != "" {
+		config.DBName = dbName
+	}
+
+	if sslMode := os.Getenv("DB_SSL_MODE"); sslMode != "" {
+		config.SSLMode = sslMode
+	}
+
+	// Build connection string
+	connStr := fmt.Sprintf(
+		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		config.Host, config.Port, config.User, config.Password, config.DBName, config.SSLMode,
+	)
+
+	// Connect with a timeout
+	db, err := sqlx.Connect("postgres", connStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	// Set connection pool settings
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(time.Minute * 5)
+
+	// Verify connection
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	return &Connection{
+		DB:     db,
+		Config: config,
+	}, nil
+} 

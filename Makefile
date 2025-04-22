@@ -16,7 +16,7 @@ MAKEFLAGS += --silent
 
 .PHONY: prod-up prod-down prod-restart prod-logs prod-status prod-db-check prod-migrations-check prod-clean \
         dev-up dev-down dev-restart dev-logs dev-status dev-db-check dev-migrations-check dev-clean help \
-        test test-auth test-register test-login test-coverage all build clean install generate lint fmt tidy update example version release list-templates validate-templates
+        test test-auth test-register test-login test-coverage all build clean install generate lint fmt tidy update example version release list-templates validate-templates run
 
 # Production environment commands
 prod-up:
@@ -100,7 +100,7 @@ dev-db-shell:
 # Run all tests
 test:
 	@echo "Running all tests..."
-	$(GOTEST) -v -race -cover ./...
+	$(GOTEST) -v -race -cover ./tools/scaffold/...
 
 # Run auth handler tests
 test-auth:
@@ -162,6 +162,7 @@ help:
 	@echo "  make release              - Create a new release"
 	@echo "  make list-templates       - List all available templates"
 	@echo "  make validate-templates   - Validate all templates"
+	@echo "  make run                  - Build and run the example project"
 
 # Build commands
 all: clean build test
@@ -181,8 +182,8 @@ clean: ## Remove build artifacts
 	rm -f coverage.out
 
 ## Generate:
-generate: ## Generate mock files for testing
-	$(GOCMD) generate ./...
+generate: build ## Generate a new example project with default settings
+	$(BUILD_DIR)/$(BINARY_NAME) -name example-api -module github.com/example/example-api
 
 ## Lint:
 lint: ## Run linters
@@ -206,13 +207,10 @@ update: ## Update dependencies
 example: ## Show example commands
 	@echo "Example commands:"
 	@echo "  Create new project:"
-	@echo "    $(BINARY_NAME) init --name myapi --module github.com/username/myapi"
+	@echo "    $(BINARY_NAME) -name myapi -module github.com/username/myapi"
 	@echo ""
-	@echo "  Add authentication:"
-	@echo "    $(BINARY_NAME) init --name myapi --auth jwt"
-	@echo ""
-	@echo "  Create resource:"
-	@echo "    $(BINARY_NAME) resource --name User --fields \"name:string:required email:string:required,email\""
+	@echo "  Run the generated project:"
+	@echo "    cd myapi && go mod tidy && go run ./cmd/api"
 
 ## Version:
 version: ## Show version
@@ -225,9 +223,18 @@ release: ## Create a new release
 
 ## Templates:
 list-templates: ## List all available templates
-	@find tools/scaffold/templates -name "*.tmpl" -type f -exec basename {} \;
+	@find tools/scaffold/templates -name "*.tmpl" -type f | sort
 
 ## Validate:
 validate-templates: ## Validate all templates
 	@echo "Validating templates..."
-	@find tools/scaffold/templates -name "*.tmpl" -type f -exec sh -c 'echo "Validating {}..." && cat {} > /dev/null' \; 
+	@find tools/scaffold/templates -name "*.tmpl" -type f -exec sh -c 'echo "Validating {}..." && cat {} > /dev/null' \;
+
+## Run:
+run: generate ## Build and run the example project
+	cd example-api && $(GOCMD) mod tidy && $(GOCMD) run ./cmd/api
+
+## Help:
+.DEFAULT_GOAL := help
+help:
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' 
