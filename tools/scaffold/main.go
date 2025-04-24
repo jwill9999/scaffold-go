@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jwill9999/dockergo/tools/scaffold/generator"
+	"github.com/jwill9999/scaffold-go/tools/scaffold/generator"
 )
 
 type ProjectScaffold struct {
@@ -162,6 +162,8 @@ func (p *ProjectScaffold) createDirectories() error {
 func (p *ProjectScaffold) initGoModule() error {
 	cmd := exec.Command("go", "mod", "init", p.Module)
 	cmd.Dir = p.Name
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to initialize go module: %w", err)
 	}

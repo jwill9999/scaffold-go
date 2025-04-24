@@ -1,199 +1,38 @@
-package service
+package services
 
 import (
-	"context"
-	"errors"
-	"fmt"
-
-	"{{.Module}}/internal/models"
-	"{{.Module}}/internal/repository"
 	"{{.Module}}/pkg/logger"
-	{{if .Features.Metrics}}"{{.Module}}/pkg/metrics"{{end}}
-	{{if .Features.Auth}}"{{.Module}}/pkg/auth"{{end}}
 )
 
-var (
-	ErrInvalidInput = errors.New("invalid input")
-	ErrNotFound     = errors.New("not found")
-	ErrUnauthorized = errors.New("unauthorized")
-)
-
-// Service interface defines standard business operations
-type Service[T any] interface {
-	Create(ctx context.Context, entity *T) error
-	GetByID(ctx context.Context, id uint) (*T, error)
-	Update(ctx context.Context, entity *T) error
-	Delete(ctx context.Context, id uint) error
-	List(ctx context.Context, page, pageSize int) ([]T, int64, error)
+// Service is a base service structure
+type Service struct {
+	logger *logger.Logger
 }
 
-// BaseService provides common functionality for services
-type BaseService[T any] struct {
-	repo    repository.Repository[T]
-	logger  *logger.Logger
-	{{if .Features.Metrics}}metrics *metrics.Client{{end}}
-}
-
-// NewBaseService creates a new base service
-func NewBaseService[T any](
-	repo repository.Repository[T],
-	logger *logger.Logger,
-	{{if .Features.Metrics}}metrics *metrics.Client,{{end}}
-) *BaseService[T] {
-	return &BaseService[T]{
-		repo:    repo,
-		logger:  logger,
-		{{if .Features.Metrics}}metrics: metrics,{{end}}
+// NewService creates a new base service
+func NewService(log *logger.Logger) *Service {
+	return &Service{
+		logger: log,
 	}
 }
 
-// Create handles entity creation with validation
-func (s *BaseService[T]) Create(ctx context.Context, entity *T) error {
-	{{if .Features.Metrics}}
-	defer s.metrics.MeasureOperation("service_create")
-	{{end}}
-
-	if err := s.validate(entity); err != nil {
-		return fmt.Errorf("validation failed: %w", err)
-	}
-
-	if err := s.repo.Create(ctx, entity); err != nil {
-		s.logger.Error("Failed to create entity", "error", err)
-		return fmt.Errorf("failed to create entity: %w", err)
-	}
-
-	return nil
+// ExampleService is a sample service
+type ExampleService struct {
+	*Service
 }
 
-// GetByID retrieves an entity by ID with authorization check
-func (s *BaseService[T]) GetByID(ctx context.Context, id uint) (*T, error) {
-	{{if .Features.Metrics}}
-	defer s.metrics.MeasureOperation("service_get_by_id")
-	{{end}}
-
-	entity, err := s.repo.GetByID(ctx, id)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, ErrNotFound
-		}
-		s.logger.Error("Failed to get entity", "error", err, "id", id)
-		return nil, fmt.Errorf("failed to get entity: %w", err)
-	}
-
-	return entity, nil
-}
-
-// Update modifies an existing entity with validation
-func (s *BaseService[T]) Update(ctx context.Context, entity *T) error {
-	{{if .Features.Metrics}}
-	defer s.metrics.MeasureOperation("service_update")
-	{{end}}
-
-	if err := s.validate(entity); err != nil {
-		return fmt.Errorf("validation failed: %w", err)
-	}
-
-	if err := s.repo.Update(ctx, entity); err != nil {
-		s.logger.Error("Failed to update entity", "error", err)
-		return fmt.Errorf("failed to update entity: %w", err)
-	}
-
-	return nil
-}
-
-// Delete removes an entity with authorization check
-func (s *BaseService[T]) Delete(ctx context.Context, id uint) error {
-	{{if .Features.Metrics}}
-	defer s.metrics.MeasureOperation("service_delete")
-	{{end}}
-
-	if err := s.repo.Delete(ctx, id); err != nil {
-		s.logger.Error("Failed to delete entity", "error", err, "id", id)
-		return fmt.Errorf("failed to delete entity: %w", err)
-	}
-
-	return nil
-}
-
-// List retrieves entities with pagination
-func (s *BaseService[T]) List(ctx context.Context, page, pageSize int) ([]T, int64, error) {
-	{{if .Features.Metrics}}
-	defer s.metrics.MeasureOperation("service_list")
-	{{end}}
-
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 10
-	}
-
-	offset := (page - 1) * pageSize
-	entities, total, err := s.repo.List(ctx, offset, pageSize)
-	if err != nil {
-		s.logger.Error("Failed to list entities", "error", err)
-		return nil, 0, fmt.Errorf("failed to list entities: %w", err)
-	}
-
-	return entities, total, nil
-}
-
-// validate performs basic validation on the entity
-func (s *BaseService[T]) validate(entity *T) error {
-	if entity == nil {
-		return ErrInvalidInput
-	}
-	return nil
-}
-
-// Example User Service implementation
-type UserService struct {
-	*BaseService[models.User]
-	{{if .Features.Auth}}auth *auth.Client{{end}}
-}
-
-func NewUserService(
-	repo repository.Repository[models.User],
-	logger *logger.Logger,
-	{{if .Features.Metrics}}metrics *metrics.Client,{{end}}
-	{{if .Features.Auth}}auth *auth.Client,{{end}}
-) *UserService {
-	return &UserService{
-		BaseService: NewBaseService[models.User](repo, logger, {{if .Features.Metrics}}metrics,{{end}}),
-		{{if .Features.Auth}}auth: auth,{{end}}
+// NewExampleService creates a new example service
+func NewExampleService(log *logger.Logger) *ExampleService {
+	return &ExampleService{
+		Service: NewService(log),
 	}
 }
 
-// Custom methods for UserService
-{{if .Features.Auth}}
-func (s *UserService) Authenticate(ctx context.Context, email, password string) (string, error) {
-	{{if .Features.Metrics}}
-	defer s.metrics.MeasureOperation("service_authenticate")
-	{{end}}
-
-	userRepo, ok := s.repo.(*repository.UserRepository)
-	if !ok {
-		return "", fmt.Errorf("invalid repository type")
+// GetServiceInfo returns information about the service
+func (s *ExampleService) GetServiceInfo() map[string]string {
+	return map[string]string{
+		"name":    "example",
+		"version": "v0.0.1",
+		"status":  "active",
 	}
-
-	user, err := userRepo.GetByEmail(ctx, email)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return "", ErrUnauthorized
-		}
-		return "", err
-	}
-
-	if !s.auth.ValidatePassword(password, user.Password) {
-		return "", ErrUnauthorized
-	}
-
-	token, err := s.auth.GenerateToken(user.ID, user.Email, user.Role)
-	if err != nil {
-		s.logger.Error("Failed to generate token", "error", err)
-		return "", fmt.Errorf("failed to generate token: %w", err)
-	}
-
-	return token, nil
-}
-{{end}} 
+} 

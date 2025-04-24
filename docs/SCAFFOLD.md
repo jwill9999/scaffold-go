@@ -2,6 +2,12 @@
 
 This document describes how to use the Go API scaffolding system to generate and customize your API project.
 
+## Implementation Status
+
+This documentation includes both implemented features and planned features. Features are marked as follows:
+- ✅ Implemented and available for use
+- 🔜 Planned for future implementation
+
 ## Quick Start
 
 ```bash
@@ -36,24 +42,24 @@ go-scaffold init [flags]
 
 ```bash
 # Authentication
---auth <type>        # Authentication type (jwt, oauth2, session)
---auth-providers     # OAuth2 providers (google, github, facebook)
+--auth <type>        # Authentication type (✅ jwt, 🔜 oauth2, 🔜 session)
+🔜 --auth-providers  # OAuth2 providers (google, github, facebook)
 
 # Database
---database <type>    # Database type (postgres, mysql, mongodb, sqlite)
+--database <type>    # Database type (✅ postgres, 🔜 mysql, 🔜 mongodb, 🔜 sqlite)
 --auto-migrate       # Enable auto-migrations in development
 
 # Caching
---cache <type>       # Cache type (redis, memory)
+--cache <type>       # Cache type (✅ redis, ✅ memory)
 
 # Observability
---metrics            # Enable Prometheus metrics
---tracing           # Enable distributed tracing
---logger <type>     # Logger type (zap, logrus)
+--metrics            # Enable Prometheus metrics (✅)
+--tracing            # Enable distributed tracing (✅ Jaeger)
+--logger <type>      # Logger type (✅ structured logging)
 
 # Documentation
---swagger            # Enable Swagger/OpenAPI documentation
---postman           # Generate Postman collection
+--swagger            # Enable Swagger/OpenAPI documentation (✅)
+🔜 --postman         # Generate Postman collection
 ```
 
 ### Resource Generation
@@ -91,17 +97,20 @@ Examples:
 ```
 
 #### Supported Field Types
-- `string`: String field
-- `int`: Integer field
-- `float`: Float field
-- `bool`: Boolean field
-- `time`: Timestamp field
-- `enum`: Enumerated type
-- `uuid`: UUID field
-- `json`: JSON field
-- `array`: Array/slice field
-- `map`: Map field
-- `ref`: Reference to another model
+Currently implemented:
+- ✅ `string`: String field
+- ✅ `int`: Integer field
+- ✅ `float`: Float field
+- ✅ `bool`: Boolean field
+- ✅ `time`: Timestamp field
+- ✅ `enum`: Enumerated type
+
+Planned for future releases:
+- 🔜 `uuid`: UUID field
+- 🔜 `json`: JSON field
+- 🔜 `array`: Array/slice field
+- 🔜 `map`: Map field
+- 🔜 `ref`: Reference to another model
 
 ## Project Structure
 
@@ -111,27 +120,27 @@ The scaffolding system generates the following structure:
 myapi/
 ├── cmd/
 │   └── api/
-│       └── main.go           # Application entry point
+│       └── main.go           # Application entry point (✅)
 ├── internal/
-│   ├── config/              # Configuration management
-│   ├── models/              # Data models
-│   ├── handlers/            # HTTP handlers
-│   ├── services/            # Business logic
-│   ├── repository/          # Data access
-│   └── migrations/          # Database migrations
+│   ├── config/              # Configuration management (✅)
+│   ├── models/              # Data models (✅)
+│   ├── handlers/            # HTTP handlers (✅)
+│   ├── services/            # Business logic (✅)
+│   ├── repository/          # Data access (✅)
+│   └── migrations/          # Database migrations (✅)
 ├── pkg/
-│   ├── auth/               # Authentication utilities
-│   ├── cache/              # Caching utilities
-│   ├── database/           # Database utilities
-│   ├── errors/             # Error handling
-│   ├── logger/             # Logging utilities
-│   ├── metrics/            # Metrics collection
-│   └── tracing/            # Distributed tracing
-├── scripts/                # Utility scripts
-├── .air.toml              # Hot reload configuration
+│   ├── auth/               # Authentication utilities (✅ JWT only)
+│   ├── cache/              # Caching utilities (✅ Redis, Memory)
+│   ├── database/           # Database utilities (✅ PostgreSQL only)
+│   ├── errors/             # Error handling (✅)
+│   ├── logger/             # Logging utilities (✅)
+│   ├── metrics/            # Metrics collection (✅ Prometheus)
+│   ├── tracing/            # Distributed tracing (✅ Jaeger)
+│   └── security/           # Security utilities (✅ CORS, Rate limiting, Security headers)
+├── scripts/                # Utility scripts (🔜)
 ├── .gitignore
-├── docker-compose.yml     # Development environment
-├── Dockerfile             # Multi-stage build
+├── docker-compose.yml     # Development environment (✅)
+├── Dockerfile             # Container build (✅)
 ├── go.mod
 └── README.md
 ```
@@ -191,7 +200,7 @@ features:
 # Create new project
 go-scaffold init --name myapi --module github.com/username/myapi
 
-# Add authentication
+# Add authentication (currently only JWT is fully implemented)
 go-scaffold init --name myapi --auth jwt
 
 # Add database and cache
@@ -208,12 +217,11 @@ go-scaffold resource --name User --fields "
   role:enum:required,oneof=admin|user
 "
 
-# Create Product resource with relationships
+# Create Product resource
 go-scaffold resource --name Product --fields "
   name:string:required
   description:string
   price:float:required,min=0
-  user_id:ref:User
 "
 ```
 
@@ -241,70 +249,119 @@ air
 go test ./...
 ```
 
-## Feature Details
+## Implemented Features
 
-### Authentication Options
+### Authentication
+- ✅ JWT Authentication
+  - Token generation and validation
+  - Refresh token support
+  - Expiration handling
 
-1. **JWT Authentication**
-```bash
-go-scaffold init --name myapi --auth jwt
-```
-- Generates JWT middleware
-- Token management
-- Refresh token support
-- Password hashing
+### Database Support
+- ✅ PostgreSQL
+  - Connection management
+  - Migration support
+  - Repository pattern implementation
 
-2. **OAuth2 Authentication**
-```bash
-go-scaffold init --name myapi --auth oauth2 --auth-providers google,github
-```
-- OAuth2 provider integration
-- Social login support
-- Profile mapping
+### Caching
+- ✅ Redis Cache
+  - Key-value operations
+  - TTL support
+  - Atomic operations
+- ✅ In-Memory Cache
+  - Fast local caching
+  - Expiration management
+  - Thread-safe operations
 
-3. **Session Authentication**
-```bash
-go-scaffold init --name myapi --auth session
-```
-- Session management
-- Cookie handling
-- Session store (Redis/DB)
+### Security
+- ✅ CORS middleware
+  - Configurable origins, methods, headers
+  - Preflight handling
+- ✅ Rate limiting
+  - Redis-backed implementation
+  - In-memory implementation
+  - Configurable limits and windows
+- ✅ Security headers
+  - Content security policy
+  - XSS protection
+  - Frame options
 
-### Database Options
+### Observability
+- ✅ Prometheus metrics
+  - Request timing
+  - Error counting
+  - Custom metric support
+- ✅ Jaeger tracing
+  - Distributed tracing
+  - Span management
+  - Context propagation
+- ✅ Structured logging
+  - Log levels
+  - Contextual information
+  - Error details
 
-1. **PostgreSQL**
-```bash
-go-scaffold init --name myapi --database postgres
-```
-- GORM integration
-- Migration support
-- Connection pooling
+### Infrastructure
+- ✅ Dockerfile
+  - Build configuration
+  - Runtime environment
+- ✅ Docker Compose
+  - Development setup
+  - Service definitions
+- ✅ Environment configuration
+  - Example .env file
+  - Configuration loading
 
-2. **MongoDB**
-```bash
-go-scaffold init --name myapi --database mongodb
-```
-- MongoDB driver
-- Document mapping
-- Index management
+### Documentation
+- ✅ Swagger/OpenAPI
+  - API documentation
+  - Schema definitions
+  - Endpoint specifications
 
-### Caching Options
+## Coming Soon
 
-1. **Redis Cache**
-```bash
-go-scaffold init --name myapi --cache redis
-```
-- Redis client
-- Cache middleware
-- Distributed locking
+The following features are planned for future releases:
 
-2. **In-Memory Cache**
-```bash
-go-scaffold init --name myapi --cache memory
-```
-- Local caching
-- TTL support
-- Cache eviction
+### Authentication Enhancements
+- 🔜 OAuth2 Authentication
+  - Multiple provider support
+  - Social login integration
+- 🔜 Session-based Authentication
+  - Cookie management
+  - Session storage
+- 🔜 Multi-factor Authentication
+  - TOTP implementation
+  - Recovery codes
+
+### Additional Database Support
+- 🔜 MySQL Support
+- 🔜 MongoDB Support
+- 🔜 SQLite Support
+- 🔜 Advanced query builders
+- 🔜 Transaction management
+
+### API Features
+- 🔜 Pagination
+- 🔜 Filtering
+- 🔜 Sorting
+- 🔜 Search
+- 🔜 Webhooks
+
+### Security Enhancements
+- 🔜 Input validation
+- 🔜 Password hashing
+- 🔜 CSRF protection
+- 🔜 Role-based access control
+
+### DevOps Support
+- 🔜 CI/CD templates
+- 🔜 Kubernetes manifests
+- 🔜 Production deployment configurations
+
+### Testing Enhancements
+- 🔜 Integration test templates
+- 🔜 End-to-end test templates
+- 🔜 Load testing templates
+- 🔜 Test data generation
 
 ## Best Practices
 

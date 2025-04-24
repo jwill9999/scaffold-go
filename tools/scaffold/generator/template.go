@@ -12,7 +12,13 @@ type TemplateGenerator struct {
 	Module      string
 	Features    map[string]bool
 	Config      interface{}
+	Resources   []Resource
 	Templates   map[string]string
+}
+
+type Resource struct {
+	Name     string
+	Resource string
 }
 
 func NewTemplateGenerator(name, module string, features []string, config interface{}) *TemplateGenerator {
@@ -26,11 +32,21 @@ func NewTemplateGenerator(name, module string, features []string, config interfa
 		Module:      module,
 		Features:    featureMap,
 		Config:      config,
+		Resources:   []Resource{},
 		Templates: map[string]string{
-			"main.go":            "templates/main.go.tmpl",
-			"config.go":          "templates/config.go.tmpl",
-			"Dockerfile":         "templates/Dockerfile.tmpl",
-			"docker-compose.yml": "templates/docker-compose.yml.tmpl",
+			// Core application files
+			"cmd/api/main.go":           "tools/scaffold/templates/main.go.tmpl",
+			"internal/config/config.go": "tools/scaffold/templates/config.go.tmpl",
+			"Dockerfile":                "tools/scaffold/templates/Dockerfile.tmpl",
+			"docker-compose.yml":        "tools/scaffold/templates/docker-compose.yml.tmpl",
+
+			// Essential packages for a basic application
+			"pkg/logger/logger.go":              "tools/scaffold/templates/logger.go.tmpl",
+			"pkg/database/database.go":          "tools/scaffold/templates/database.go.tmpl",
+			"internal/handlers/handlers.go":     "tools/scaffold/templates/handlers.go.tmpl",
+			"internal/repository/repository.go": "tools/scaffold/templates/repository.go.tmpl",
+			"internal/services/services.go":     "tools/scaffold/templates/service.go.tmpl",
+			"internal/models/models.go":         "tools/scaffold/templates/model.go.tmpl",
 		},
 	}
 }
@@ -66,14 +82,18 @@ func (g *TemplateGenerator) generateFile(filename, templatePath string) error {
 	// Execute template
 	data := struct {
 		ProjectName string
+		Name        string
 		Module      string
 		Features    map[string]bool
 		Config      interface{}
+		Resources   []Resource
 	}{
 		ProjectName: g.ProjectName,
+		Name:        g.ProjectName,
 		Module:      g.Module,
 		Features:    g.Features,
 		Config:      g.Config,
+		Resources:   g.Resources,
 	}
 
 	if err := tmpl.Execute(out, data); err != nil {

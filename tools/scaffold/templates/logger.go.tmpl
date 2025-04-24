@@ -1,84 +1,77 @@
 package logger
 
 import (
-	"os"
+	"fmt"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"gopkg.in/natefinch/lumberjack.v2"
-
-	"{{.Module}}/internal/config"
 )
 
+// Logger wraps zap.Logger to provide additional functionality
 type Logger struct {
-	*zap.SugaredLogger
+	*zap.Logger
 }
 
-// NewLogger creates a new logger instance
-func NewLogger(cfg *config.LoggerConfig) (*Logger, error) {
-	// Configure logging level
-	level, err := zapcore.ParseLevel(cfg.Level)
+// NewLogger creates a new logger with the given log level
+func NewLogger(level string) (*Logger, error) {
+	var zapLevel zapcore.Level
+	err := zapLevel.UnmarshalText([]byte(level))
 	if err != nil {
-		return nil, err
+		zapLevel = zapcore.InfoLevel
 	}
 
-	// Configure encoders
-	encoderConfig := zap.NewProductionEncoderConfig()
-	encoderConfig.TimeKey = "timestamp"
-	encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	encoderConfig.EncodeLevel = zapcore.CapitalLevelEncoder
-
-	var encoder zapcore.Encoder
-	if cfg.Format == "json" {
-		encoder = zapcore.NewJSONEncoder(encoderConfig)
-	} else {
-		encoder = zapcore.NewConsoleEncoder(encoderConfig)
+	config := zap.Config{
+		Level:             zap.NewAtomicLevelAt(zapLevel),
+		Development:       false,
+		DisableCaller:     false,
+		DisableStacktrace: false,
+		Sampling:          nil,
+		Encoding:          "json",
+		EncoderConfig: zapcore.EncoderConfig{
+			TimeKey:        "ts",
+			LevelKey:       "level",
+			NameKey:        "logger",
+			CallerKey:      "caller",
+			MessageKey:     "msg",
+			StacktraceKey:  "stacktrace",
+			LineEnding:     zapcore.DefaultLineEnding,
+			EncodeLevel:    zapcore.LowercaseLevelEncoder,
+			EncodeTime:     zapcore.ISO8601TimeEncoder,
+			EncodeDuration: zapcore.SecondsDurationEncoder,
+			EncodeCaller:   zapcore.ShortCallerEncoder,
+		},
+		OutputPaths:      []string{"stdout"},
+		ErrorOutputPaths: []string{"stderr"},
 	}
 
-	// Configure output paths
-	var writer zapcore.WriteSyncer
-	if cfg.OutputPath != "" {
-		writer = zapcore.AddSync(&lumberjack.Logger{
-			Filename:   cfg.OutputPath,
-			MaxSize:    100, // megabytes
-			MaxBackups: 3,
-			MaxAge:     28,   // days
-			Compress:   true, // compress the backups
-		})
-	} else {
-		writer = zapcore.AddSync(os.Stdout)
+	zapLogger, err := config.Build()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build logger: %w", err)
 	}
 
-	// Create core
-	core := zapcore.NewCore(encoder, writer, level)
+	logger := &Logger{
+		Logger: zapLogger,
+	}
 
-	// Create logger
-	logger := zap.New(core,
-		zap.AddCaller(),
-		zap.AddCallerSkip(1),
-		zap.AddStacktrace(zapcore.ErrorLevel),
-	)
-
-	return &Logger{
-		SugaredLogger: logger.Sugar(),
-	}, nil
+	logger.Info("Logger initialized", zap.String("level", level))
+	return logger, nil
 }
 
 // WithFields adds structured fields to the logger
 func (l *Logger) WithFields(fields map[string]interface{}) *Logger {
-	args := make([]interface{}, 0, len(fields)*2)
+	zapFields := make([]zap.Field, 0, len(fields))
 	for k, v := range fields {
-		args = append(args, k, v)
+		zapFields = append(zapFields, zap.Any(k, v))
 	}
 	return &Logger{
-		SugaredLogger: l.With(args...),
+		Logger: l.With(zapFields...),
 	}
 }
 
 // WithError adds an error field to the logger
 func (l *Logger) WithError(err error) *Logger {
 	return &Logger{
-		SugaredLogger: l.With("error", err),
+		Logger: l.With(zap.Error(err)),
 	}
 }
 

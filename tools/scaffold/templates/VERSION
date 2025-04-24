@@ -1,4 +1,4 @@
-1.0.0
+version: 0.0.4
 
 Template Versions:
 - config.go.tmpl: 1.0.0
@@ -23,5 +23,16 @@ Template Versions:
 - swagger.yaml.tmpl: 1.0.0
 - test.go.tmpl: 1.0.0
 - .env.example.tmpl: 1.0.0
+- auth/jwt.go.tmpl: 1.0.0
+- cache/interface.go.tmpl: 1.0.0
+- cache/memory.go.tmpl: 1.0.0
+- cache/redis.go.tmpl: 1.0.0
+- database/postgres.go.tmpl: 1.0.0
+- metrics/prometheus.go.tmpl: 1.0.0
+- security/cors.go.tmpl: 1.0.0
+- security/headers.go.tmpl: 1.0.0
+- security/ratelimit.go.tmpl: 1.0.0
+- tracing/jaeger.go.tmpl: 1.0.0
 
-Last Updated: 2024-03-20 
+Last Updated: 2024-05-28
+Release Date: 2024-04-21 
