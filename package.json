@@ -5,7 +5,11 @@
   "description": "Go API Scaffolding System",
   "scripts": {
     "prepare": "husky install",
-    "commit": "git-cz"
+    "commit": "git-cz",
+    "lint": "go vet ./... && go fmt ./...",
+    "test": "go test ./...",
+    "test:ci": "go test -coverprofile=cover.out -json ./... | tee test-report.json",
+    "test:html": "go test -coverprofile=cover.out ./... && go tool cover -html=cover.out -o coverage.html"
   },
   "config": {
     "commitizen": {
