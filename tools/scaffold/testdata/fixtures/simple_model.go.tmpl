@@ -1,0 +1,28 @@
+package {{ .PackageName }}
+
+import (
+	"time"
+	
+	"{{ .Module }}/pkg/types"
+)
+
+// {{ .ModelName }} represents a {{ .Description | lower }}
+type {{ .ModelName }} struct {
+	ID        string    `json:"id" db:"id"`
+	Name      string    `json:"name" db:"name"`
+	Email     string    `json:"email" db:"email"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// New{{ .ModelName }} creates a new {{ .ModelName }} instance
+func New{{ .ModelName }}(name, email string) *{{ .ModelName }} {
+	now := time.Now()
+	return &{{ .ModelName }}{
+		ID:        types.NewID(),
+		Name:      name,
+		Email:     email,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+} 

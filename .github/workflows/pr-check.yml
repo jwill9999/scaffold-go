@@ -1,0 +1,57 @@
+name: Pull Request Check
+
+on:
+  pull_request:
+    branches: [ "develop", "main" ]
+
+jobs:
+  validate:
+    name: Validate PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+
+      - name: Check code formatting
+        run: |
+          if [ "$(gofmt -l . | wc -l)" -gt 0 ]; then
+            echo "The following files are not formatted properly:"
+            gofmt -l .
+            exit 1
+          fi
+          echo "All Go files are properly formatted."
+
+      - name: Run Go vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test -v ./...
+
+      - name: Check commit messages
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+      
+      - name: Install commitlint
+        run: npm install -g @commitlint/cli @commitlint/config-conventional
+        
+      - name: Validate commits
+        run: |
+          # Get the commits in the PR
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            git log --format=%B --no-merges ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} | \
+            npx commitlint --config commitlint.config.js
+          fi
+
+      - name: Check for merge conflicts
+        run: |
+          if grep -r "^<<<<<<< " --include="*.go" .; then
+            echo "Merge conflicts detected in Go files"
+            exit 1
+          fi 
