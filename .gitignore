@@ -57,4 +57,4 @@ logs/
 # Docker volumes
 docker/volumes/ 
 
-node_modules/node_modules/
+node_modules
