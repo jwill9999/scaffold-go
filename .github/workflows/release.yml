@@ -1,0 +1,43 @@
+name: Release
+on:
+  push:
+    branches:
+      - main
+      - develop
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.22'
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          
+      - name: Install semantic-release plugins
+        run: npm install -g semantic-release @semantic-release/git @semantic-release/exec
+        
+      - name: Build Go binaries
+        run: |
+          mkdir -p bin
+          GOOS=linux GOARCH=amd64 go build -o bin/go-scaffold-linux-amd64 ./tools/scaffold
+          GOOS=darwin GOARCH=amd64 go build -o bin/go-scaffold-darwin-amd64 ./tools/scaffold
+          GOOS=windows GOARCH=amd64 go build -o bin/go-scaffold-windows-amd64.exe ./tools/scaffold
+        
+      - name: Semantic Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release 

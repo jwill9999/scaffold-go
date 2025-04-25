@@ -134,11 +134,20 @@ my-project/
 
 ## Contributing
 
+We welcome contributions! Please follow these steps:
+
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Commit your changes using our commit script:
+   ```bash
+   npm run commit
+   ```
+   This will guide you through creating a properly formatted commit message
+5. Push to your branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
+
+For more details, see [our commit guide](docs/COMMIT_GUIDE.md).
 
 ## License
 
