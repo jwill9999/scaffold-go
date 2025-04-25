@@ -77,7 +77,14 @@ func (g *TemplateGenerator) generateFile(filename, templatePath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create file %s: %w", outputPath, err)
 	}
-	defer out.Close()
+	defer func() {
+		if closeErr := out.Close(); closeErr != nil {
+			// If we're already returning with an error, don't overwrite it
+			if err == nil {
+				err = fmt.Errorf("failed to close file %s: %w", outputPath, closeErr)
+			}
+		}
+	}()
 
 	// Execute template
 	data := struct {

@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -49,7 +50,9 @@ func SetupTestTemplate(content string) (tempDir string, templatePath string, err
 
 	templatePath, err = CreateTempTestFile(tempDir, "test.tmpl", content)
 	if err != nil {
-		os.RemoveAll(tempDir)
+		if removeErr := os.RemoveAll(tempDir); removeErr != nil {
+			return "", "", fmt.Errorf("failed to create test file: %v (cleanup error: %v)", err, removeErr)
+		}
 		return "", "", err
 	}
 
