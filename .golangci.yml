@@ -1,0 +1,44 @@
+run:
+  go: '1.22'
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - gofmt
+    - goimports
+    - misspell
+
+linters-settings:
+  gofmt:
+    simplify: true
+  goimports:
+    local-prefixes: github.com/jwill9999/scaffold-go
+  gosec:
+    excludes:
+      - G204  # Subprocess launched with a potential tainted input or cmd arguments
+
+issues:
+  exclude:
+    - "G404: Use of weak random number generator"
+    - "func `executeCommand` is unused"
+  exclude-dirs:
+    - vendor
+    - testdata
+  exclude-files:
+    - ".*_test\\.go$"
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+    - text: "func `executeCommand` is unused"
+      linters:
+        - unused
+  max-issues-per-linter: 0
+  max-same-issues: 0 

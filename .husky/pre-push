@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🧪 Running tests with race detection..."
+npm run test:ci || {
+  echo "❌ Tests failed. Please fix them before pushing."
+  exit 1
+}
+
+echo "📊 Generating coverage report..."
+npm run test:html || {
+  echo "⚠️ Coverage report generation failed, but continuing..."
+}
+
+echo "✅ Pre-push checks passed!" 

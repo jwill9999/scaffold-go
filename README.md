@@ -1,5 +1,10 @@
 # Go API Scaffolding System
 
+[![Go](https://github.com/jwill9999/scaffold-go/actions/workflows/go.yml/badge.svg)](https://github.com/jwill9999/scaffold-go/actions/workflows/go.yml)
+[![Release](https://github.com/jwill9999/scaffold-go/actions/workflows/release.yml/badge.svg)](https://github.com/jwill9999/scaffold-go/actions/workflows/release.yml)
+[![PR Check](https://github.com/jwill9999/scaffold-go/actions/workflows/pr-check.yml/badge.svg)](https://github.com/jwill9999/scaffold-go/actions/workflows/pr-check.yml)
+[![codecov](https://codecov.io/gh/jwill9999/scaffold-go/branch/main/graph/badge.svg)](https://codecov.io/gh/jwill9999/scaffold-go)
+
 A comprehensive scaffolding system for building production-ready Go API services with clean architecture, modern tooling, and best practices.
 
 ## Features
