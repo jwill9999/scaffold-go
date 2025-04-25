@@ -160,13 +160,11 @@ func (p *ProjectScaffold) createDirectories() error {
 }
 
 func (p *ProjectScaffold) initGoModule() error {
-	cmd := exec.Command("go", "mod", "init", p.Module)
-	cmd.Dir = p.Name
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to initialize go module: %w", err)
+	initCmd := fmt.Sprintf("cd %s && go mod init %s", p.Name, p.Module)
+	if err := executeCommand(initCmd); err != nil {
+		return fmt.Errorf("failed to initialize Go module: %w", err)
 	}
+
 	return nil
 }
 
