@@ -81,7 +81,7 @@ jobs:
       - name: Install dependencies
         run: go mod download
       
-      - name: Run tests
+      - name: Run tests with coverage
         run: npm run test:ci
         env:
           POSTGRES_HOST: localhost
@@ -96,17 +96,24 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
-          file: ./cover.out
+          file: ./test-output/cover.out
           fail_ci_if_error: false
       
       - name: Upload HTML coverage report
         uses: actions/upload-artifact@v3
         with:
           name: coverage-report
-          path: coverage.html
+          path: test-output/coverage.html
           
       - name: Upload test report
         uses: actions/upload-artifact@v3
         with:
           name: test-report
-          path: test-report.json 
+          path: test-output/test-report.json
+          
+      - name: Upload all test artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: all-test-artifacts
+          path: test-output/
+          if-no-files-found: warn 

@@ -170,11 +170,11 @@ scaffold-go/
 
 ### Coverage Reports
 
-Our testing infrastructure automatically generates coverage reports in multiple formats:
+Our testing infrastructure automatically generates coverage reports in multiple formats in the `test-output` directory:
 
-- **HTML Coverage Report**: Generated with `npm run test:html`, creates a visual representation of code coverage in `coverage.html`
-- **JSON Test Reports**: Generated with `npm run test:ci`, creates structured test data in `test-report.json`
-- **Coverage Data**: Both commands generate raw coverage data in `cover.out`
+- **HTML Coverage Report**: Generated with `npm run test:html`, creates a visual representation of code coverage in `test-output/coverage.html`
+- **JSON Test Reports**: Generated with `npm run test:ci`, creates structured test data in `test-output/test-report.json`
+- **Coverage Data**: Both commands generate raw coverage data in `test-output/cover.out`
 
 ### Automated Reporting
 
@@ -188,7 +188,7 @@ Coverage and test results are integrated into our development workflow:
 
 - Coverage reports are available as artifacts in GitHub Actions runs
 - The Codecov dashboard shows historical coverage trends
-- Locally, run `npm run test:html` and open `coverage.html` in a browser
+- Locally, run `npm run test:html` and open `test-output/coverage.html` in a browser
 
 ### Coverage Goals
 

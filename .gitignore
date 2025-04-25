@@ -58,3 +58,9 @@ logs/
 docker/volumes/ 
 
 node_modules
+
+# Test output files
+/test-output/
+*.out
+coverage.html
+test-report.json
