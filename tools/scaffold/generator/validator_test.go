@@ -3,6 +3,7 @@ package generator
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"text/template"
 )
@@ -82,7 +83,7 @@ func TestTemplateFilesSyntax(t *testing.T) {
 
 		// Check if file has .tmpl extension
 		if !info.IsDir() && (filepath.Ext(path) == ".tmpl" ||
-			filepath.Ext(filepath.Ext(path)+path) == ".go.tmpl") {
+			strings.HasSuffix(path, ".go.tmpl")) {
 			templateFiles = append(templateFiles, path)
 		}
 		return nil
