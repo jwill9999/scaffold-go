@@ -3,6 +3,9 @@ name: Security
 on:
   push:
     branches: ["develop", "main"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   pull_request:
     branches: ["develop", "main"]
   schedule:
@@ -14,6 +17,7 @@ permissions:
 
 jobs:
   security-scan:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     name: Security Scan
     runs-on: ubuntu-latest
     steps:
@@ -26,6 +30,7 @@ jobs:
           cache: true
 
   dependency-check:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     name: Dependency Check
     runs-on: ubuntu-latest
     steps:
