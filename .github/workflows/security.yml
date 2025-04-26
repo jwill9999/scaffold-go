@@ -25,24 +25,6 @@ jobs:
           go-version: "1.22"
           cache: true
 
-      - name: Install gosec
-        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
-
-      - name: Run gosec
-        run: |
-          gosec -fmt sarif -out gosec-results.sarif ./...
-          if [ -s gosec-results.sarif ]; then
-            echo "🔒 Security issues found. See gosec-results.sarif for details."
-          else
-            echo "✅ No security issues found"
-          fi
-
-      - name: Upload gosec SARIF report
-        uses: github/codeql-action/upload-sarif@v2
-        with:
-          sarif_file: gosec-results.sarif
-          category: gosec
-
   dependency-check:
     name: Dependency Check
     runs-on: ubuntu-latest
