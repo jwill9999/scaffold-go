@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -15,7 +16,21 @@ func main() {
 	}
 
 	version := os.Args[1]
+
+	// Validate version format with regex (e.g., v1.0.0)
+	validVersion := regexp.MustCompile(`^v?\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$`)
+	if !validVersion.MatchString(version) {
+		fmt.Printf("Error: Invalid version format '%s'. Expected format: v1.0.0 or 1.0.0\n", version)
+		os.Exit(1)
+	}
+
 	versionPath := "tools/scaffold/templates/VERSION"
+
+	// Check if file exists before attempting to read it
+	if _, err := os.Stat(versionPath); os.IsNotExist(err) {
+		fmt.Printf("Error: VERSION file not found at %s\n", versionPath)
+		os.Exit(1)
+	}
 
 	currentContent, err := os.ReadFile(versionPath)
 	if err != nil {
@@ -51,9 +66,21 @@ func main() {
 		today,
 		releaseDate)
 
-	err = os.WriteFile(versionPath, []byte(newContent), 0644)
+	// Create a temporary file first and then rename it to avoid partial writes
+	tempFile := versionPath + ".tmp"
+	err = os.WriteFile(tempFile, []byte(newContent), 0600)
 	if err != nil {
-		fmt.Printf("Error writing VERSION file: %v\n", err)
+		fmt.Printf("Error writing temporary VERSION file: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Rename the temp file to the target file (atomic operation)
+	if err := os.Rename(tempFile, versionPath); err != nil {
+		fmt.Printf("Error updating VERSION file: %v\n", err)
+		// Try to clean up the temp file
+		if rmErr := os.Remove(tempFile); rmErr != nil {
+			fmt.Printf("Additionally, failed to remove temporary file: %v\n", rmErr)
+		}
 		os.Exit(1)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // TestProjectData holds the standard test project configuration
@@ -21,23 +22,127 @@ var TestProjectData = map[string]interface{}{
 	"ApiVersion":    "v1",
 }
 
+// ValidatePathSafety checks if a path is safe (no path traversal)
+func ValidatePathSafety(basePath, targetPath string) error {
+	// Clean both paths to remove any . or multiple slashes
+	cleanBase := filepath.Clean(basePath)
+	cleanTarget := filepath.Clean(targetPath)
+
+	// Get absolute paths
+	absBase, err := filepath.Abs(cleanBase)
+	if err != nil {
+		return fmt.Errorf("invalid base path: %w", err)
+	}
+
+	absTarget, err := filepath.Abs(cleanTarget)
+	if err != nil {
+		return fmt.Errorf("invalid target path: %w", err)
+	}
+
+	// Check if target is within base directory
+	rel, err := filepath.Rel(absBase, absTarget)
+	if err != nil {
+		return fmt.Errorf("failed to determine relative path: %w", err)
+	}
+
+	if strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("path traversal detected: %s is outside %s", targetPath, basePath)
+	}
+
+	return nil
+}
+
 // CreateTempTestDir creates a temporary directory for testing and returns its path
 // The caller is responsible for cleaning up by calling os.RemoveAll
 func CreateTempTestDir() (string, error) {
+	// Use a safer pattern with more specific prefix
 	tempDir, err := os.MkdirTemp("", "scaffold-test-")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}
+
+	// Set secure permissions - we need execute permission for directories
+	// 0500 (read+execute) is appropriate for test directories that only need to be read and traversed
+	// #nosec G302 - We need execute permission for directories, so 0500 is appropriate
+	if err := os.Chmod(tempDir, 0500); err != nil {
+		// If chmod fails, remove the directory and return error
+		if rmErr := os.RemoveAll(tempDir); rmErr != nil {
+			return "", fmt.Errorf("failed to set permissions: %v (cleanup error: %v)", err, rmErr)
+		}
+		return "", fmt.Errorf("failed to set permissions: %w", err)
+	}
+
 	return tempDir, nil
 }
 
 // CreateTempTestFile creates a temporary file with the given content for testing
 func CreateTempTestFile(dir, name, content string) (string, error) {
-	path := filepath.Join(dir, name)
-	err := os.WriteFile(path, []byte(content), 0644)
-	if err != nil {
+	// First validate path safety
+	if err := ValidatePathSafety(dir, filepath.Join(dir, name)); err != nil {
 		return "", err
 	}
+
+	// Prevent directory traversal in filename
+	if strings.Contains(name, string(os.PathSeparator)) || strings.Contains(name, "..") {
+		return "", fmt.Errorf("invalid filename: %s", name)
+	}
+
+	// Use absolute path for dir to prevent relative path attacks
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute directory path: %w", err)
+	}
+
+	// Get canonical form of path to avoid symbolic link attacks
+	canonicalDir, err := filepath.EvalSymlinks(absDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to evaluate symlinks: %w", err)
+	}
+
+	// Create safe path with sanitized name
+	safeFileName := filepath.Clean(name)
+	path := filepath.Join(canonicalDir, safeFileName)
+
+	// Additional safety check against directory traversal
+	if !strings.HasPrefix(path, canonicalDir+string(os.PathSeparator)) {
+		return "", fmt.Errorf("path traversal detected: %s", path)
+	}
+
+	// Create file with secure permissions
+	// First create a temporary file
+	tmpPath := path + ".tmp"
+
+	// The path is fully validated above for security
+	// #nosec G304 - We've already validated the path to prevent path traversal
+	file, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return "", fmt.Errorf("failed to create file: %w", err)
+	}
+
+	// Write content and handle errors
+	_, err = file.WriteString(content)
+	if err != nil {
+		// Close the file before returning
+		if closeErr := file.Close(); closeErr != nil {
+			return "", fmt.Errorf("write error: %v (close error: %v)", err, closeErr)
+		}
+		// Clean up temp file
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("failed to write content: %w", err)
+	}
+
+	// Ensure the file is properly closed
+	if err := file.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("failed to close file: %w", err)
+	}
+
+	// Atomically rename to final path
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return "", fmt.Errorf("failed to rename temp file: %w", err)
+	}
+
 	return path, nil
 }
 
