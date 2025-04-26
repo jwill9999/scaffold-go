@@ -16,6 +16,8 @@ on:
     branches: ["main"]
   schedule:
     - cron: "41 3 * * 3" # Run weekly on Wednesdays at 3:41 AM
+  pull_request:
+    branches: ["main", "develop"]
 
 jobs:
   analyze:
