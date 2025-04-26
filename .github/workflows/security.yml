@@ -1,0 +1,71 @@
+name: Security
+
+on:
+  push:
+    branches: ["develop", "main"]
+  pull_request:
+    branches: ["develop", "main"]
+  schedule:
+    - cron: "0 0 * * 1" # Run weekly on Mondays
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec
+        run: |
+          gosec -fmt sarif -out gosec-results.sarif ./...
+          if [ -s gosec-results.sarif ]; then
+            echo "🔒 Security issues found. See gosec-results.sarif for details."
+          else
+            echo "✅ No security issues found"
+          fi
+
+      - name: Upload gosec SARIF report
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: gosec-results.sarif
+          category: gosec
+
+  dependency-check:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Install nancy
+        run: go install github.com/sonatype-nexus-community/nancy@latest
+
+      - name: Generate go list
+        run: go list -json -deps ./... > go-list.json
+
+      - name: Check dependencies with nancy
+        run: cat go-list.json | nancy sleuth --output json > nancy-results.json
+
+      - name: Upload nancy results
+        uses: actions/upload-artifact@v3
+        with:
+          name: nancy-results
+          path: nancy-results.json

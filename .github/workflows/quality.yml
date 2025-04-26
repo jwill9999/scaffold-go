@@ -2,9 +2,9 @@ name: Code Quality
 
 on:
   push:
-    branches: [ "develop", "main" ]
+    branches: ["develop", "main"]
   pull_request:
-    branches: [ "develop", "main" ]
+    branches: ["develop", "main"]
 
 permissions:
   contents: read
@@ -15,41 +15,156 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.22'
+          go-version: "1.22"
           cache: true
-      
+
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
           version: latest
           args: --timeout=5m
-      
+
       - name: Run golangci-lint
-        run: golangci-lint run ./...
+        run: golangci-lint run --no-config --timeout=5m ./...
 
   format:
     name: Format
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.22'
+          go-version: "1.22"
           cache: true
-      
-      - name: Check formatting
+
+      - name: Install goimports
+        run: go install golang.org/x/tools/cmd/goimports@latest
+
+      - name: Check gofmt formatting
         run: |
           if [ "$(gofmt -l . | wc -l)" -gt 0 ]; then
-            echo "The following files are not formatted properly:"
+            echo "The following files are not formatted properly with gofmt:"
             gofmt -l .
             exit 1
           fi
+          echo "✅ gofmt check passed"
+
+      - name: Check goimports formatting
+        run: |
+          GOIMPORTS_OUTPUT=$(goimports -l .)
+          if [ -n "$GOIMPORTS_OUTPUT" ]; then
+            echo "The following files need import formatting with goimports:"
+            echo "$GOIMPORTS_OUTPUT"
+            echo "Run 'goimports -w .' to fix these issues"
+            exit 1
+          fi
+          echo "✅ goimports check passed"
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Install gosec
+        run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Run gosec security scanner
+        run: |
+          mkdir -p test-output
+
+          # Run gosec with multiple output formats
+          gosec -fmt=json -out=test-output/security-report.json ./...
+          gosec -fmt=html -out=test-output/security-report.html ./...
+
+          # Also run with text output for the GitHub Actions log
+          echo "Security Issues Found:"
+          gosec ./...
+
+          # Extract stats for summary
+          FOUND_ISSUES=$(cat test-output/security-report.json | grep -c '"severity":' || true)
+          HIGH_ISSUES=$(cat test-output/security-report.json | grep -c '"severity":"HIGH"' || true)
+
+          # Display summary
+          echo "Found $FOUND_ISSUES security issues ($HIGH_ISSUES high severity)"
+
+          # Don't fail the build yet - just warn about high severity issues
+          # Change this to exit 1 if you want to fail builds with high severity issues
+          if [ "$HIGH_ISSUES" -gt 0 ]; then
+            echo "⚠️ WARNING: High severity security issues found!"
+            echo "Review the security report for details"
+          else
+            echo "✅ No high severity security issues found"
+          fi
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            test-output/security-report.json
+            test-output/security-report.html
+          if-no-files-found: warn
+
+  dependency-check:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.22"
+          cache: true
+
+      - name: Install nancy
+        run: go install github.com/sonatype-nexus-community/nancy@latest
+
+      - name: Check dependencies for vulnerabilities
+        run: |
+          # Create a temporary report file
+          mkdir -p test-output
+
+          # Run nancy and capture output
+          go list -json -deps ./... | nancy sleuth --output json > test-output/dependency-report.json || true
+
+          # Check if there are high or critical vulnerabilities
+          VULN_COUNT=$(cat test-output/dependency-report.json | grep -c '"Severity":"Critical\\|High"' || true)
+
+          # Display summary
+          echo "Found $VULN_COUNT high or critical vulnerabilities"
+
+          # Output full report for reference
+          cat test-output/dependency-report.json
+
+          # If there are vulnerabilities, we warn but don't fail the build yet
+          # Change to exit 1 if you want to fail the build on vulnerabilities
+          if [ "$VULN_COUNT" -gt 0 ]; then
+            echo "⚠️ WARNING: Vulnerabilities found in dependencies!"
+            echo "Review the report and update dependencies as needed."
+          else
+            echo "✅ No high or critical vulnerabilities found in dependencies"
+          fi
+
+      - name: Upload dependency report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-report
+          path: test-output/dependency-report.json
+          if-no-files-found: warn
 
   test:
     name: Test
@@ -68,19 +183,19 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.22'
+          go-version: "1.22"
           cache: true
-      
+
       - name: Install dependencies
         run: go mod download
-      
+
       - name: Run tests with coverage
         run: npm run test:ci
         env:
@@ -89,31 +204,31 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: testdb
-      
+
       - name: Generate HTML coverage report
         run: npm run test:html
-        
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
           file: ./test-output/cover.out
           fail_ci_if_error: false
-      
+
       - name: Upload HTML coverage report
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: test-output/coverage.html
-          
+
       - name: Upload test report
         uses: actions/upload-artifact@v4
         with:
           name: test-report
           path: test-output/test-report.json
-          
+
       - name: Upload all test artifacts
         uses: actions/upload-artifact@v4
         with:
           name: all-test-artifacts
           path: test-output/
-          if-no-files-found: warn 
+          if-no-files-found: warn
