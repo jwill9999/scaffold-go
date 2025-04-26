@@ -3,6 +3,10 @@
 [![Go](https://github.com/jwill9999/scaffold-go/actions/workflows/go.yml/badge.svg)](https://github.com/jwill9999/scaffold-go/actions/workflows/go.yml)
 [![Release](https://github.com/jwill9999/scaffold-go/actions/workflows/release.yml/badge.svg)](https://github.com/jwill9999/scaffold-go/actions/workflows/release.yml)
 [![PR Check](https://github.com/jwill9999/scaffold-go/actions/workflows/pr-check.yml/badge.svg)](https://github.com/jwill9999/scaffold-go/actions/workflows/pr-check.yml)
+[![Linting](https://github.com/jwill9999/scaffold-go/actions/workflows/linting.yml/badge.svg)](https://github.com/jwill9999/scaffold-go/actions/workflows/linting.yml)
+[![Testing](https://github.com/jwill9999/scaffold-go/actions/workflows/testing.yml/badge.svg)](https://github.com/jwill9999/scaffold-go/actions/workflows/testing.yml)
+[![Security](https://github.com/jwill9999/scaffold-go/actions/workflows/security.yml/badge.svg)](https://github.com/jwill9999/scaffold-go/actions/workflows/security.yml)
+[![Quality](https://github.com/jwill9999/scaffold-go/actions/workflows/quality.yml/badge.svg)](https://github.com/jwill9999/scaffold-go/actions/workflows/quality.yml)
 [![codecov](https://codecov.io/gh/jwill9999/scaffold-go/branch/main/graph/badge.svg)](https://codecov.io/gh/jwill9999/scaffold-go)
 
 A comprehensive scaffolding system for building production-ready Go API services with clean architecture, modern tooling, and best practices.
@@ -10,6 +14,7 @@ A comprehensive scaffolding system for building production-ready Go API services
 ## Features
 
 ### Core Components
+
 - ✅ Clean Architecture Implementation
 - ✅ Modular Design
 - ✅ Configuration Management (Viper)
@@ -19,9 +24,20 @@ A comprehensive scaffolding system for building production-ready Go API services
 - ✅ Health Check Endpoints
 
 ### Database
+
 - ✅ PostgreSQL Configuration
 
+### Security
+
+- ✅ Input Validation
+- ✅ Security Headers Middleware
+- ✅ Rate Limiting
+- ✅ Secure Code Practices
+- ✅ Security Scanning (gosec)
+- ✅ Dependency Vulnerability Scanning
+
 ### Observability
+
 - ✅ Structured Logging
 - ✅ Request Tracing
 
@@ -41,8 +57,23 @@ make build
 ## Quick Start
 
 ```bash
-# Generate a new project
-./bin/go-scaffold -name my-api -module github.com/username/my-api
+# Clone the repository
+git clone https://github.com/jwill9999/scaffold-go.git
+
+# Install dependencies
+go mod download
+
+# Build the scaffolding tool
+make build
+
+# Generate a new project with default settings
+make generate
+
+# Generate a custom project with specific features
+make generate PROJECT_NAME=my-api MODULE_PATH=github.com/username/my-api FEATURES=auth,metrics
+
+# Or use the binary directly
+./bin/go-scaffold -name my-api -module github.com/username/my-api -features auth,metrics
 
 # Navigate to your project
 cd my-api
@@ -55,6 +86,7 @@ go run cmd/api/main.go
 ```
 
 Your API will be available at `http://localhost:8080` with the following endpoints:
+
 - Health check: `GET /health`
 - API status: `GET /api/v1/status`
 
@@ -63,6 +95,7 @@ Your API will be available at `http://localhost:8080` with the following endpoin
 The scaffolding system creates the following components:
 
 ### Project Structure
+
 - `cmd/api/main.go` - Application entry point
 - `internal/config/config.go` - Configuration management
 - `internal/handlers/handlers.go` - HTTP handlers
@@ -74,6 +107,13 @@ The scaffolding system creates the following components:
 - `Dockerfile` - Container configuration
 - `docker-compose.yml` - Multi-container setup
 
+### Security Templates
+
+- JWT Authentication
+- Rate Limiting Middleware
+- CORS Configuration
+- Security Headers
+
 ## Development Commands
 
 ```bash
@@ -82,6 +122,14 @@ make build
 
 # Run tests
 make test
+npm run test:ci
+npm run test:html
+
+# Run linting
+npm run lint
+
+# Run security checks
+npm run security
 
 # Generate and run an example project
 make run
@@ -98,7 +146,7 @@ make help
 
 ## Configuration
 
-The generated project uses a layered configuration approach with environment variables and YAML files. 
+The generated project uses a layered configuration approach with environment variables and YAML files.
 Default configuration is loaded from:
 
 1. Default values in code
@@ -112,6 +160,14 @@ Example configuration for a generated project:
 server:
   port: 8080
   timeout: 30
+
+security:
+  cors:
+    allowed_origins: ["*"]
+    allowed_methods: ["GET", "POST", "PUT", "DELETE"]
+  rate_limit:
+    requests_per_minute: 60
+    burst: 10
 
 log_level: "info"
 ```
@@ -128,14 +184,61 @@ my-project/
 │   ├── handlers/       # HTTP request handlers
 │   ├── models/         # Data models
 │   ├── repository/     # Data access layer
+│   ├── core/           # Core business logic
+│   │   ├── middleware/ # HTTP middleware
+│   │   ├── errors/     # Error handling
+│   │   └── server/     # Server configuration
 │   └── services/       # Business logic
 ├── pkg/                # Public libraries
 │   ├── database/       # Database utilities
-│   └── logger/         # Logging utilities
+│   ├── logger/         # Logging utilities
+│   ├── security/       # Security utilities
+│   └── metrics/        # Metrics collection
 ├── config.yaml         # Configuration file
 ├── Dockerfile          # Container definition
 └── docker-compose.yml  # Container orchestration
 ```
+
+## Security Features
+
+The scaffold includes several security features:
+
+1. **Static Code Analysis**: Uses gosec to detect security issues in code
+2. **Dependency Scanning**: Checks dependencies for known vulnerabilities
+3. **Path Traversal Prevention**: Safe file handling with validation
+4. **Input Validation**: Request validation middleware
+5. **Rate Limiting**: Configurable rate limiting with Redis or in-memory storage
+6. **Security Headers**: CORS, CSP, and other security headers
+7. **Authentication**: JWT authentication with secure configuration
+
+These checks are integrated into the development workflow through:
+
+- Pre-commit hooks (security scanning)
+- CI/CD pipelines (automated security checks)
+- Weekly scheduled security scans
+
+## CI/CD Integration
+
+The project uses GitHub Actions for continuous integration and delivery with a modular workflow structure:
+
+### Core Workflows
+
+- **quality.yml**: Orchestrates the linting and testing processes by calling reusable workflows
+- **security.yml**: Runs security scans (gosec) and dependency checks (nancy)
+- **linting.yml**: Performs code formatting and linting checks (reusable)
+- **testing.yml**: Executes tests with code coverage reporting (reusable)
+- **release.yml**: Handles the release process with semantic versioning
+- **pr-check.yml**: Validates pull requests for commit message standards and merge conflicts
+- **codeql.yml**: Analyzes code for security vulnerabilities
+
+### Workflow Structure
+
+- **Reusable Workflows**: Both linting and testing are implemented as reusable workflows
+- **Modular Design**: Each workflow has a specific responsibility
+- **Reduced Duplication**: Common tasks are defined once and reused across workflows
+- **Scheduled Scans**: Security workflows run weekly to ensure ongoing protection
+
+This approach ensures maintainability, standardization, and efficient updates across the CI/CD pipeline.
 
 ## Contributing
 
