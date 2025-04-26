@@ -223,10 +223,9 @@ func (p *ProjectScaffold) generateBaseFiles() error {
 	return nil
 }
 
-// executeCommand is completely rewritten to use a whitelist-based command execution
-// to prevent command injection attacks
-//
-// nolint:unused // This function is kept for reference and potential future use
+// executeCommand executes a shell command with security validation.
+// This function is kept for reference purposes but is not used.
+// nolint:unused // Intentionally kept for reference as a secure command execution example
 func executeCommand(cmdStr string) error {
 	// This function is deprecated for security reasons
 	fmt.Println("Warning: executeCommand is deprecated for security reasons")

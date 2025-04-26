@@ -1,16 +1,11 @@
-name: Testing
+name: Run Tests
 
 on:
   push:
     branches: ["develop", "main"]
   pull_request:
     branches: ["develop", "main"]
-  workflow_call:
-    inputs:
-      go-version:
-        required: false
-        type: string
-        default: "1.22"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,9 +14,10 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+
     services:
       postgres:
-        image: postgres:16
+        image: postgres:15
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_USER: postgres
@@ -35,12 +31,12 @@ jobs:
           --health-retries 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ inputs.go-version || '1.22' }}
+          go-version: "1.21"
           cache: true
 
       - name: Install dependencies
@@ -49,36 +45,26 @@ jobs:
       - name: Run tests with coverage
         run: npm run test:ci
         env:
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: testdb
+          DATABASE_URL: "postgres://postgres:postgres@localhost:5432/testdb?sslmode=disable"
 
       - name: Generate HTML coverage report
         run: npm run test:html
 
-      - name: Upload coverage to Codecov
+      - name: Upload coverage report to Codecov
         uses: codecov/codecov-action@v3
         with:
-          file: ./test-output/cover.out
+          files: ./test-output/cover.out
+          flags: unittests
+          name: codecov-umbrella
           fail_ci_if_error: false
 
-      - name: Upload HTML coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: test-output/coverage.html
-
       - name: Upload test report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v3
+        if: always()
         with:
-          name: test-report
-          path: test-output/test-report.json
-
-      - name: Upload all test artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: all-test-artifacts
-          path: test-output/
-          if-no-files-found: warn
+          name: test-results
+          path: |
+            test-output/test-report.json
+            test-output/cover.out
+            test-output/coverage.html
+          retention-days: 7
