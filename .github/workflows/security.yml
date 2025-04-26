@@ -65,7 +65,7 @@ jobs:
         run: cat go-list.json | nancy sleuth --output json > nancy-results.json
 
       - name: Upload nancy results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: nancy-results
           path: nancy-results.json
