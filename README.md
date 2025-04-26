@@ -2,7 +2,7 @@
 
 [![Go](https://github.com/jwill9999/scaffold-go/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/jwill9999/scaffold-go/actions/workflows/go.yml)
 [![Release](https://github.com/jwill9999/scaffold-go/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/jwill9999/scaffold-go/actions/workflows/release.yml)
-[![PR Check](https://github.com/jwill9999/scaffold-go/actions/workflows/pr-check.yml/badge.svg)](https://github.com/jwill9999/scaffold-go/actions/workflows/pr-check.yml)
+[![PR Check](https://github.com/jwill9999/scaffold-go/actions/workflows/pr-check.yml/badge.svg?branch=develop)](https://github.com/jwill9999/scaffold-go/actions/workflows/pr-check.yml?branch=develop)
 [![Linting](https://github.com/jwill9999/scaffold-go/actions/workflows/linting.yml/badge.svg?branch=develop)](https://github.com/jwill9999/scaffold-go/actions/workflows/linting.yml)
 [![Testing](https://github.com/jwill9999/scaffold-go/actions/workflows/testing.yml/badge.svg?branch=main)](https://github.com/jwill9999/scaffold-go/actions/workflows/testing.yml)
 [![Security](https://github.com/jwill9999/scaffold-go/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/jwill9999/scaffold-go/actions/workflows/security.yml)
