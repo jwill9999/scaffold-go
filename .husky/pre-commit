@@ -8,9 +8,27 @@ npm run test || {
 }
 
 echo "🔍 Running linters..."
-npm run lint || {
+npm run lint:fix || {
   echo "❌ Linting failed. Please fix the issues before committing."
   exit 1
 }
+
+echo "🔒 Running security checks..."
+npm run security || {
+  echo "❌ Security checks failed. Please fix the vulnerabilities before committing."
+  exit 1
+}
+
+echo "✨ Formatting code..."
+npm run format || {
+  echo "❌ Formatting failed. Please check goimports installation."
+  exit 1
+}
+
+# Stage any formatting changes made by goimports
+STAGED_GO_FILES=$(git diff --name-only --cached -- '*.go')
+if [ -n "$STAGED_GO_FILES" ]; then
+  git add $STAGED_GO_FILES
+fi
 
 echo "✅ Pre-commit checks passed!" 

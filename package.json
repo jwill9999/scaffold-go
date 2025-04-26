@@ -6,10 +6,13 @@
   "scripts": {
     "prepare": "husky install",
     "commit": "git-cz",
-    "lint": "go vet ./... && go fmt ./...",
+    "format": "goimports -w .",
+    "lint": "go vet ./... && go fmt ./... && golangci-lint run --no-config --timeout=5m ./...",
+    "lint:fix": "go vet ./... && go fmt ./... && golangci-lint run --no-config --timeout=5m --fix ./...",
     "test": "go test ./...",
-    "test:ci": "mkdir -p test-output && TIMESTAMP=$(date +%Y%m%d_%H%M%S) && go test -coverprofile=test-output/cover-$TIMESTAMP.out -json ./... | tee test-output/test-report-$TIMESTAMP.json && cp test-output/cover-$TIMESTAMP.out test-output/cover.out && cp test-output/test-report-$TIMESTAMP.json test-output/test-report.json",
-    "test:html": "mkdir -p test-output && go test -coverprofile=test-output/cover.out ./... && go tool cover -html=test-output/cover.out -o test-output/coverage.html"
+    "test:ci": "mkdir -p test-output && go test -coverprofile=test-output/cover.out -json ./... | tee test-output/test-report.json",
+    "test:html": "mkdir -p test-output && go test -coverprofile=test-output/cover.out ./... && go tool cover -html=test-output/cover.out -o test-output/coverage.html",
+    "security": "gosec -quiet ./..."
   },
   "config": {
     "commitizen": {

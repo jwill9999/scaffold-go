@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/jwill9999/scaffold-go/tools/scaffold/generator"
@@ -127,7 +128,7 @@ func main() {
 
 func (p *ProjectScaffold) Create() error {
 	// Create base directory
-	if err := os.MkdirAll(p.Name, 0755); err != nil {
+	if err := os.MkdirAll(p.Name, 0750); err != nil {
 		return fmt.Errorf("failed to create project directory: %w", err)
 	}
 
@@ -152,7 +153,7 @@ func (p *ProjectScaffold) Create() error {
 func (p *ProjectScaffold) createDirectories() error {
 	for _, dir := range p.Structure.Directories {
 		path := filepath.Join(p.Name, dir)
-		if err := os.MkdirAll(path, 0755); err != nil {
+		if err := os.MkdirAll(path, 0750); err != nil {
 			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
 	}
@@ -160,9 +161,46 @@ func (p *ProjectScaffold) createDirectories() error {
 }
 
 func (p *ProjectScaffold) initGoModule() error {
-	initCmd := fmt.Sprintf("cd %s && go mod init %s", p.Name, p.Module)
-	if err := executeCommand(initCmd); err != nil {
+	// Use filepath.Join instead of string concatenation for path safety
+	projectPath := filepath.Join(".", p.Name)
+
+	// Validate module name to prevent command injection
+	if err := validateModuleName(p.Module); err != nil {
+		return err
+	}
+
+	// Execute command with explicit arguments instead of through shell
+	// The module name has been validated above to prevent command injection
+	// #nosec G204 - p.Module is validated by validateModuleName
+	cmd := exec.Command("go", "mod", "init", p.Module)
+	cmd.Dir = projectPath
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to initialize Go module: %w", err)
+	}
+
+	return nil
+}
+
+// validateModuleName checks if the module name is valid
+// Allows typical Go module path characters but prevents any special shell chars
+func validateModuleName(name string) error {
+	// Disallow empty name
+	if name == "" {
+		return fmt.Errorf("module name cannot be empty")
+	}
+
+	// Create a whitelist of allowed characters
+	validModulePattern := `^[a-zA-Z0-9][a-zA-Z0-9\.\-_/]+$`
+	matched, err := regexp.MatchString(validModulePattern, name)
+	if err != nil {
+		return fmt.Errorf("error validating module name: %w", err)
+	}
+
+	if !matched {
+		return fmt.Errorf("invalid module name. Module name must start with a letter or number and contain only letters, numbers, periods, hyphens, underscores, and slashes")
 	}
 
 	return nil
@@ -185,9 +223,79 @@ func (p *ProjectScaffold) generateBaseFiles() error {
 	return nil
 }
 
-func executeCommand(cmd string) error {
-	command := exec.Command("sh", "-c", cmd)
-	command.Stdout = os.Stdout
-	command.Stderr = os.Stderr
-	return command.Run()
+// executeCommand executes a shell command with security validation.
+// This function is kept for reference purposes but is not used.
+// nolint:unused // Intentionally kept for reference as a secure command execution example
+func executeCommand(cmdStr string) error {
+	// This function is deprecated for security reasons
+	fmt.Println("Warning: executeCommand is deprecated for security reasons")
+
+	// Define safe commands with their allowed arguments
+	safeCommands := map[string][]string{
+		"go mod init": {"^[a-zA-Z0-9][a-zA-Z0-9\\./\\-_]+$"}, // Allow standard module names
+		"go mod tidy": nil,                                   // No arguments needed
+		"go fmt":      {"^\\./.*$"},                          // Allow only relative paths starting with ./
+	}
+
+	// Try to match against our safe commands
+	var matchedCmd string
+	var argPattern []string
+
+	for cmd, pattern := range safeCommands {
+		if strings.HasPrefix(cmdStr, cmd) {
+			matchedCmd = cmd
+			argPattern = pattern
+			break
+		}
+	}
+
+	if matchedCmd == "" {
+		return fmt.Errorf("command not allowed for security reasons: %s", cmdStr)
+	}
+
+	// Extract arguments
+	args := strings.TrimSpace(strings.TrimPrefix(cmdStr, matchedCmd))
+
+	// Parse the matched command to get program and initial args
+	cmdParts := strings.Fields(matchedCmd)
+	if len(cmdParts) == 0 {
+		return fmt.Errorf("empty command")
+	}
+
+	program := cmdParts[0]
+	progArgs := cmdParts[1:]
+
+	// Add additional arguments if they exist and pass validation
+	if args != "" {
+		// If we have argument patterns defined, validate arguments
+		if argPattern != nil {
+			validArg := false
+			for _, pattern := range argPattern {
+				matched, err := regexp.MatchString(pattern, args)
+				if err != nil {
+					return fmt.Errorf("error validating command arguments: %w", err)
+				}
+				if matched {
+					validArg = true
+					break
+				}
+			}
+
+			if !validArg {
+				return fmt.Errorf("command argument not allowed for security reasons: %s", args)
+			}
+		}
+
+		// Add the validated arguments
+		argParts := strings.Fields(args)
+		progArgs = append(progArgs, argParts...)
+	}
+
+	// Execute the command with explicit arguments - we've fully validated these
+	// using a strict whitelist approach, so this is secure
+	// #nosec G204 - program and progArgs are fully validated above
+	cmd := exec.Command(program, progArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
