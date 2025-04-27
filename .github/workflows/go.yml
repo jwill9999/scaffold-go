@@ -6,6 +6,8 @@ on:
       - main
       - develop
       - staging
+  pull_request:
+    branches: ["develop", "main", "staging"]
 
 jobs:
   build:
