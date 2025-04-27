@@ -16,6 +16,9 @@ on:
     branches:
       - main
       - develop
+      - staging
+  pull_request:
+    branches: ["develop", "main", "staging"]
   schedule:
     - cron: "41 3 * * 3" # Run weekly on Wednesdays at 3:41 AM
 
