@@ -2,9 +2,12 @@ name: Run Tests
 
 on:
   push:
-    branches:
-      - main
-      - develop
+    branches: ["develop", "main", "staging"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+  pull_request:
+    branches: ["develop", "main", "staging"]
   workflow_dispatch:
 
 permissions:
