@@ -40,7 +40,7 @@ all: clean build test
 ## build: Build the scaffold CLI tool
 build:
 	mkdir -p $(BUILD_DIR)
-	$(CGO_ENABLED) $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_FILE)
+	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_FILE)
 
 ## install: Install the scaffold CLI tool
 install: build

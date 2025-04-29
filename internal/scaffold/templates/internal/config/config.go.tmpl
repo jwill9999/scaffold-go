@@ -1,0 +1,58 @@
+package config
+
+import (
+	"github.com/spf13/viper"
+)
+
+type Config struct {
+	Server   ServerConfig   `mapstructure:"server"`
+	Security SecurityConfig `mapstructure:"security"`
+	Database DatabaseConfig `mapstructure:"database"`
+	LogLevel string        `mapstructure:"log_level"`
+}
+
+type ServerConfig struct {
+	Port    int `mapstructure:"port"`
+	Timeout int `mapstructure:"timeout"`
+}
+
+type SecurityConfig struct {
+	CORS      CORSConfig      `mapstructure:"cors"`
+	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
+}
+
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
+	AllowedMethods []string `mapstructure:"allowed_methods"`
+}
+
+type RateLimitConfig struct {
+	RequestsPerMinute int `mapstructure:"requests_per_minute"`
+	Burst            int `mapstructure:"burst"`
+}
+
+type DatabaseConfig struct {
+	Type     string `mapstructure:"type"`
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Name     string `mapstructure:"name"`
+	User     string `mapstructure:"user"`
+	Password string `mapstructure:"password"`
+}
+
+func Load() (*Config, error) {
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+
+	if err := viper.ReadInConfig(); err != nil {
+		return nil, err
+	}
+
+	config := &Config{}
+	if err := viper.Unmarshal(config); err != nil {
+		return nil, err
+	}
+
+	return config, nil
+} 
