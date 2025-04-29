@@ -6,11 +6,15 @@ on:
       - main
       - develop
       - staging
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   pull_request:
     branches: ["develop", "main", "staging"]
 
 jobs:
   quality:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3

@@ -7,6 +7,7 @@
 [![Testing](https://github.com/jwill9999/scaffold-go/actions/workflows/testing.yml/badge.svg?branch=main)](https://github.com/jwill9999/scaffold-go/actions/workflows/testing.yml)
 [![Security](https://github.com/jwill9999/scaffold-go/actions/workflows/security.yml/badge.svg?branch=main)](https://github.com/jwill9999/scaffold-go/actions/workflows/security.yml)
 [![Quality](https://github.com/jwill9999/scaffold-go/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/jwill9999/scaffold-go/actions/workflows/quality.yml)
+[![Staging Build](https://github.com/jwill9999/scaffold-go/actions/workflows/go.yml/badge.svg?branch=staging)](https://github.com/jwill9999/scaffold-go/actions/workflows/go.yml?branch=staging)
 [![codecov](https://codecov.io/gh/jwill9999/scaffold-go/branch/main/graph/badge.svg)](https://codecov.io/gh/jwill9999/scaffold-go)
 
 A comprehensive scaffolding system for building production-ready Go API services with clean architecture, modern tooling, and best practices.

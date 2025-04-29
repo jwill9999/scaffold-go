@@ -4,6 +4,10 @@ on:
     branches:
       - main
       - develop
+      - staging
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
 permissions:
   contents: write
   issues: write
@@ -20,7 +24,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.22"
+          go-version: "1.24"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
